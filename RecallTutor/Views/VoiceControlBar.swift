@@ -1,0 +1,129 @@
+import SwiftUI
+
+/// Compact voice-tutor controls — speaker mute/unmute (or connect), and an
+/// "Ask Question" mic pill while connected. Lives in the lecture card header
+/// and teleports into the quiz header while the quiz is open.
+struct VoiceControlBar: View {
+    let tutor: VoiceTutorManager
+
+    var body: some View {
+        HStack(spacing: 6) {
+            speakerButton
+
+            if tutor.status == .connected {
+                micPill
+            }
+
+            if let error = tutor.errorMessage {
+                Text(error)
+                    .font(.appBody(size: 13))
+                    .foregroundStyle(Theme.danger)
+                    .lineLimit(1)
+                    .frame(maxWidth: 110)
+            }
+        }
+    }
+
+    private var speakerButton: some View {
+        Button {
+            if tutor.status == .connected {
+                tutor.isMuted.toggle()
+            } else if tutor.status == .idle || tutor.status == .error {
+                tutor.connect()
+            }
+        } label: {
+            ZStack {
+                if tutor.isSpeaking && !tutor.isMuted {
+                    Circle()
+                        .fill(Theme.accent.opacity(0.3))
+                        .modifier(PulseEffect())
+                }
+                Group {
+                    if tutor.status == .connecting {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .tint(Theme.accent)
+                    } else {
+                        Image(systemName: speakerIcon)
+                            .font(.system(size: 17))
+                            .foregroundStyle(speakerTint)
+                    }
+                }
+                .frame(width: 30, height: 30)
+                .glassEffect(.regular.tint(speakerFill).interactive(), in: .circle)
+            }
+            .frame(width: 30, height: 30)
+        }
+        .disabled(tutor.status == .connecting)
+        .accessibilityLabel(speakerAccessibilityLabel)
+    }
+
+    private var speakerAccessibilityLabel: String {
+        switch tutor.status {
+        case .connected: tutor.isMuted ? "Unmute voice tutor" : "Mute voice tutor"
+        case .connecting: "Connecting voice tutor"
+        default: "Start voice tutor"
+        }
+    }
+
+    private var speakerIcon: String {
+        switch tutor.status {
+        case .error: "speaker.slash"
+        default: tutor.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
+        }
+    }
+
+    private var speakerFill: Color {
+        switch tutor.status {
+        case .connecting: Theme.accent.opacity(0.2)
+        case .error: Theme.danger.opacity(0.1)
+        default: tutor.isMuted ? Theme.stateHover : Theme.accent.opacity(0.15)
+        }
+    }
+
+    private var speakerTint: Color {
+        switch tutor.status {
+        case .error: Theme.danger
+        default: tutor.isMuted ? Theme.textTertiary : Theme.accent
+        }
+    }
+
+    private var micPill: some View {
+        Button {
+            tutor.toggleMic()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: tutor.isMicOpen ? "mic.fill" : "mic.slash")
+                    .font(.system(size: 13))
+                Text(tutor.isMicOpen ? "Listening…" : "Ask Question")
+                    .font(.appBody(size: 13, weight: .medium))
+            }
+            .foregroundStyle(tutor.isMicOpen ? Color.red : Theme.textTertiary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .glassEffect(
+                .regular.tint(tutor.isMicOpen ? Color.red.opacity(0.12) : .clear).interactive()
+            )
+            .overlay {
+                if tutor.isMicOpen {
+                    Capsule()
+                        .stroke(Color.red.opacity(0.4), lineWidth: 1.5)
+                        .modifier(PulseEffect())
+                }
+            }
+        }
+    }
+}
+
+/// Continuous soft pulse used for the speaking ring and live mic border.
+private struct PulseEffect: ViewModifier {
+    @State private var pulsing = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(pulsing ? 1.35 : 1)
+            .opacity(pulsing ? 0 : 0.9)
+            .animation(.easeOut(duration: 1.5).repeatForever(autoreverses: false), value: pulsing)
+            .onAppear { pulsing = true }
+    }
+}
