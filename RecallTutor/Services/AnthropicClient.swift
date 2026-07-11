@@ -264,4 +264,73 @@ struct AnthropicClient {
         ]
         return streamText(body: body)
     }
+
+    // MARK: - Topic generation
+
+    private static let topicsSchema: [String: Any] = [
+        "type": "object",
+        "properties": [
+            "topics": [
+                "type": "array",
+                "description": "A list of 8 topics generated for the user.",
+                "items": [
+                    "type": "object",
+                    "properties": [
+                        "label": ["type": "string", "description": "Short label, max 3 words"],
+                        "prompt": ["type": "string", "description": "The exact prompt/question to ask the tutor"]
+                    ],
+                    "required": ["label", "prompt"],
+                    "additionalProperties": false
+                ]
+            ]
+        ],
+        "required": ["topics"],
+        "additionalProperties": false
+    ]
+
+    static func generateTopics(
+        category: String,
+        readingLevel: ReadingLevel,
+        excluding: Set<String>
+    ) async throws -> [Topic] {
+        let body: [String: Any] = [
+            "model": Models.chat,
+            "max_tokens": 1024,
+            "system": Prompts.topicGenerationSystemPrompt(category: category, level: readingLevel),
+            "messages": [
+                [
+                    "role": "user",
+                    "content": Prompts.topicGenerationUserPrompt(excluding: excluding)
+                ]
+            ],
+            "output_config": [
+                "format": [
+                    "type": "json_schema",
+                    "schema": topicsSchema
+                ]
+            ]
+        ]
+
+        let request = try makeRequest(body: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw AnthropicError.badResponse }
+        guard http.statusCode == 200 else {
+            throw AnthropicError.from(status: http.statusCode, body: data)
+        }
+
+        struct ResponseEnvelope: Decodable {
+            var topics: [Topic]
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let content = json["content"] as? [[String: Any]],
+              let textBlock = content.first(where: { $0["type"] as? String == "text" }),
+              let text = textBlock["text"] as? String,
+              let topicsData = text.data(using: .utf8) else {
+            throw AnthropicError.badResponse
+        }
+
+        let envelope = try JSONDecoder().decode(ResponseEnvelope.self, from: topicsData)
+        return envelope.topics
+    }
 }
