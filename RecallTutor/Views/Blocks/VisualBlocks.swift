@@ -98,6 +98,11 @@ struct ChartBlockView: View {
                 )
                 .foregroundStyle(by: .value("Label", point.label))
                 .cornerRadius(3)
+                .annotation(position: .overlay) {
+                    Text(point.value.formatted())
+                        .font(.appBody(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
             }
             .chartForegroundStyleScale(range: chartPalette)
             .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
@@ -114,6 +119,11 @@ struct ChartBlockView: View {
                     y: .value(spec.yLabel ?? "Y", point.value)
                 )
                 .foregroundStyle(chartPalette[0])
+                .annotation(position: .top) {
+                    Text(point.value.formatted())
+                        .font(.appBody(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                }
             }
             .chartXAxis {
                 AxisMarks { _ in
@@ -135,6 +145,11 @@ struct ChartBlockView: View {
                     )
                     .foregroundStyle(chartPalette[index % chartPalette.count])
                     .cornerRadius(3)
+                    .annotation(position: .trailing) {
+                        Text(point.value.formatted())
+                            .font(.appBody(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
                 }
                 .chartYAxis { AxisMarks { AxisValueLabel().font(.appBody(size: 13)) } }
             } else {
@@ -145,6 +160,11 @@ struct ChartBlockView: View {
                     )
                     .foregroundStyle(chartPalette[index % chartPalette.count])
                     .cornerRadius(3)
+                    .annotation(position: .top) {
+                        Text(point.value.formatted())
+                            .font(.appBody(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
                 }
                 .chartXAxis { AxisMarks { AxisValueLabel().font(.appBody(size: 13)) } }
             }
