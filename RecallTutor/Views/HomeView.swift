@@ -11,6 +11,8 @@ struct HomeView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 16) {
+                    Spacer(minLength: 12)
+
                     VStack(spacing: 24) {
                         Text("Select a topic to learn more about it.")
                             .font(.appBody(size: 17))
