@@ -53,7 +53,7 @@ enum Prompts {
     ```
     Use 3-6 steps, each under 8 words.
 
-    Do NOT include any other kinds of code blocks (no python, javascript, mermaid, d3, or HTML) — they cannot be rendered.
+    Do NOT include mermaid, d3, or HTML blocks — they cannot be rendered. You MAY use fenced code blocks (```python, ```javascript, etc.) for source code examples — they will render in a monospaced font.
     """
 
     static func chatSystemPrompt(level: ReadingLevel) -> String {

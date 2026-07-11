@@ -89,14 +89,19 @@ struct MarkdownText: View {
         case "flow":
             FlowBlockView(json: body)
         default:
-            // Fallback for stray code blocks: render as monospaced text.
-            Text(body)
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundStyle(Theme.textSecondary)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.statePill)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+            // Fallback for code blocks: render as monospaced text with
+            // horizontal scrolling so long lines don't wrap awkwardly.
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(body)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.statePill)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
 
