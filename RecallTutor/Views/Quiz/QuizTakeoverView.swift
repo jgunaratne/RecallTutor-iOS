@@ -13,6 +13,13 @@ struct QuizTakeoverView: View {
         case intro, question, reveal, scorecard
     }
 
+    /// Snapshot of a completed question so the user can navigate back.
+    private struct AnsweredQuestion {
+        let question: QuizQuestion
+        let chosenIndex: Int
+        let feedback: String
+    }
+
     private static let questionsPerRound = 5
     private static let timerDuration: TimeInterval = 45
     private static let difficulties: [QuizDifficulty] = [.warmup, .warmup, .solid, .solid, .tricky]
@@ -32,6 +39,14 @@ struct QuizTakeoverView: View {
     @State private var introLine = Prompts.professorIntroLines.randomElement()!
     @State private var feedbackTask: Task<Void, Never>?
     @State private var timerExpired = false
+    /// History of answered questions for back-navigation.
+    @State private var answeredHistory: [AnsweredQuestion] = []
+    /// When reviewing a previous question, this is its index in answeredHistory.
+    /// nil means we're on the live/current question.
+    @State private var reviewingIndex: Int?
+
+    /// Whether we are reviewing a previously-answered question.
+    private var isReviewing: Bool { reviewingIndex != nil }
 
     var body: some View {
         ZStack {
@@ -42,11 +57,15 @@ struct QuizTakeoverView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        switch phase {
-                        case .intro: introView
-                        case .question: questionView
-                        case .reveal: revealView
-                        case .scorecard: scorecardView
+                        if let ri = reviewingIndex {
+                            reviewView(answeredHistory[ri])
+                        } else {
+                            switch phase {
+                            case .intro: introView
+                            case .question: questionView
+                            case .reveal: revealView
+                            case .scorecard: scorecardView
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
@@ -54,10 +73,9 @@ struct QuizTakeoverView: View {
                     .frame(maxWidth: .infinity)
                 }
 
-                if phase == .reveal {
-                    nextButton
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
+                // Bottom navigation bar (voice controls + back/next)
+                if phase != .intro && phase != .scorecard {
+                    bottomBar
                 }
             }
 
@@ -67,8 +85,6 @@ struct QuizTakeoverView: View {
             }
         }
         .task { await startAfterIntro() }
-        // Pause the voice tutor while the quiz intro shows — the model is
-        // usually mid-turn on a card explanation; the first question lifts it.
         .onAppear { model.voiceTutor?.quizStateChanged(isActive: true) }
     }
 
@@ -92,13 +108,9 @@ struct QuizTakeoverView: View {
                 .font(.serifDisplay(size: 22))
                 .foregroundStyle(Theme.textPrimary)
             Spacer()
-            // The voice tutor's controls teleport here while the quiz is open
-            // so the student can mute the tutor or ask a question mid-quiz.
-            if let tutor = model.voiceTutor {
-                VoiceControlBar(tutor: tutor)
-            }
             if phase != .scorecard {
-                Text("Question \(questionIndex + 1) of \(Self.questionsPerRound)")
+                let displayIndex = reviewingIndex.map { $0 + 1 } ?? (questionIndex + 1)
+                Text("Question \(displayIndex) of \(Self.questionsPerRound)")
                     .font(.appBody(size: 17))
                     .monospacedDigit()
                     .foregroundStyle(Theme.textTertiary)
@@ -118,6 +130,152 @@ struct QuizTakeoverView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 56)
+    }
+
+    // MARK: - Bottom navigation bar
+
+    private var bottomBar: some View {
+        VStack(spacing: 0) {
+            GlassEffectContainer(spacing: 12) {
+                HStack {
+                    // Back button — go to previous question
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) { goBack() }
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                            .font(.appBody(size: 17))
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .glassEffect(.regular.interactive())
+                    }
+                    .disabled(!canGoBack)
+                    .opacity(canGoBack ? 1 : 0.4)
+
+                    Spacer()
+
+                    // Voice tutor controls (Gemini Live + Ask Question)
+                    if let tutor = model.voiceTutor {
+                        VoiceControlBar(tutor: tutor)
+                    }
+
+                    Spacer()
+
+                    // Next / forward button
+                    if isReviewing {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.15)) { goForward() }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("Next")
+                                    .font(.appBody(size: 17))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .glassEffect(.regular.interactive())
+                        }
+                    } else if phase == .reveal {
+                        Button {
+                            Task { await handleNext() }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(questionIndex < Self.questionsPerRound - 1 ? "Next" : "Results")
+                                    .font(.appBody(size: 17, weight: .medium))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .tint(Theme.accentStrong)
+                    } else {
+                        // Placeholder to keep layout balanced during question phase
+                        Label("Next", systemImage: "chevron.right")
+                            .font(.appBody(size: 17))
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .glassEffect(.regular.interactive())
+                            .opacity(0.4)
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private var canGoBack: Bool {
+        if let ri = reviewingIndex { return ri > 0 }
+        return !answeredHistory.isEmpty
+    }
+
+    private func goBack() {
+        if let ri = reviewingIndex {
+            if ri > 0 { reviewingIndex = ri - 1 }
+        } else {
+            // Jump from the live question/reveal into history
+            if !answeredHistory.isEmpty {
+                reviewingIndex = answeredHistory.count - 1
+            }
+        }
+    }
+
+    private func goForward() {
+        guard let ri = reviewingIndex else { return }
+        if ri < answeredHistory.count - 1 {
+            reviewingIndex = ri + 1
+        } else {
+            // Return to the live question
+            reviewingIndex = nil
+        }
+    }
+
+    /// Read-only view of a previously answered question.
+    private func reviewView(_ answered: AnsweredQuestion) -> some View {
+        let q = answered.question
+        return VStack(spacing: 14) {
+            Text(q.question)
+                .font(.serifDisplay(size: 17))
+                .foregroundStyle(Theme.textPrimary.opacity(0.55))
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 10) {
+                ForEach(Array(q.answers.enumerated()), id: \.offset) { index, answer in
+                    AnswerButtonView(
+                        text: answer.text,
+                        index: index,
+                        state: answer.isCorrect
+                            ? .revealedCorrect
+                            : (index == answered.chosenIndex ? .revealedWrong : .revealedDimmed)
+                    ) {}
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("FEEDBACK")
+                    .font(.appBody(size: 13, weight: .medium))
+                    .tracking(0.5)
+                    .foregroundStyle(Theme.textTertiary)
+                Text(answered.feedback)
+                    .font(.appBody(size: 17))
+                    .italic()
+                    .lineSpacing(5)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.035), radius: 10, y: 4)
+        }
     }
 
     // MARK: - Intro
@@ -269,19 +427,7 @@ struct QuizTakeoverView: View {
         }
     }
 
-    private var nextButton: some View {
-        Button {
-            Task { await handleNext() }
-        } label: {
-            Text(questionIndex < Self.questionsPerRound - 1 ? "Next question" : "See results")
-                .font(.appBody(size: 17, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-        }
-        .buttonStyle(.glassProminent)
-        .tint(Theme.accentStrong)
-    }
+    // nextButton is now integrated into bottomBar
 
     // MARK: - Scorecard phase
 
@@ -384,6 +530,8 @@ struct QuizTakeoverView: View {
 
         feedback = ""
         phase = .reveal
+        // Clear any review state so the live reveal is shown
+        reviewingIndex = nil
 
         // Pre-fetch the next question while the student reads feedback.
         let nextIndex = questionIndex + 1
@@ -417,11 +565,21 @@ struct QuizTakeoverView: View {
                 }
             }
         }
+        // Store in history once feedback is complete (or after a short delay)
+        // We save a snapshot now; the feedbackTask will update `feedback` but
+        // we capture the final version in handleNext before advancing.
     }
 
     private func handleNext() async {
         let nextIndex = questionIndex + 1
         feedbackTask?.cancel()
+
+        // Save the current question to history before advancing
+        if let q = currentQuestion, let ci = chosenIndex {
+            answeredHistory.append(AnsweredQuestion(
+                question: q, chosenIndex: ci, feedback: feedback
+            ))
+        }
 
         if nextIndex >= Self.questionsPerRound {
             model.recordQuizCompletion(score: score, total: Self.questionsPerRound)
@@ -441,6 +599,7 @@ struct QuizTakeoverView: View {
         chosenIndex = nil
         feedback = ""
         questionIndex = nextIndex
+        reviewingIndex = nil
 
         if let prefetched = prefetchedQuestion {
             currentQuestion = prefetched

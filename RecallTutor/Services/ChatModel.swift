@@ -104,9 +104,9 @@ final class ChatModel {
 
     // MARK: - Settings
 
-    func saveKeys(anthropic: String?, gemini: String?) {
-        if let anthropic { Keychain.saveKey(anthropic, account: .anthropic) }
-        if let gemini { Keychain.saveKey(gemini, account: .gemini) }
+    func saveKeys(anthropic: String, gemini: String) {
+        Keychain.saveKey(anthropic, account: .anthropic)
+        Keychain.saveKey(gemini, account: .gemini)
         refreshProviders()
     }
 

@@ -11,6 +11,7 @@ struct LectureView: View {
 
     @Environment(ChatModel.self) private var model
     @State private var currentIndex = 0
+    @State private var imageGenerator = CardImageGenerator()
 
     var body: some View {
         let cards = CardSplitter.splitIntoCards(message.content)
@@ -34,7 +35,7 @@ struct LectureView: View {
         let isLastCard = safeIndex == cards.count - 1
 
         return VStack(spacing: 0) {
-            // Header: label, writing indicator, voice controls, progress
+            // Header: label, writing indicator, progress
             HStack(spacing: 10) {
                 Text("LECTURE NOTES")
                     .font(.appBody(size: 13, weight: .medium))
@@ -51,9 +52,6 @@ struct LectureView: View {
                             .foregroundStyle(Theme.accent)
                     }
                 }
-                if let tutor = model.voiceTutor {
-                    VoiceControlBar(tutor: tutor)
-                }
                 if cards.count > 1 {
                     Text("\(safeIndex + 1) of \(cards.count)")
                         .font(.appBody(size: 13))
@@ -67,14 +65,41 @@ struct LectureView: View {
 
             // Current card content — fills the screen, scrolls if long
             ScrollView {
-                MarkdownText(content: cards[safeIndex])
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 4)
-                    .padding(.bottom, 20)
+                VStack(alignment: .leading, spacing: 14) {
+                    // AI-generated illustration (Nano Banana Flash Lite)
+                    CardIllustrationView(
+                        image: imageGenerator.images[safeIndex],
+                        isGenerating: imageGenerator.generating.contains(safeIndex)
+                    )
+
+                    MarkdownText(content: cards[safeIndex])
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 20)
+                .animation(.easeOut(duration: 0.3), value: imageGenerator.images[safeIndex] != nil)
             }
             .id(safeIndex)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Page dots (above the navigation bar)
+            if cards.count > 1 {
+                HStack(spacing: 5) {
+                    ForEach(0..<cards.count, id: \.self) { index in
+                        Capsule()
+                            .fill(index == safeIndex ? Theme.accent : Theme.borderSubtle)
+                            .frame(width: index == safeIndex ? 14 : 5, height: 5)
+                            .onTapGesture {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    currentIndex = index
+                                }
+                            }
+                    }
+                }
+                .padding(.top, 6)
+                .padding(.bottom, 4)
+            }
 
             // Floating glass navigation at the card's bottom edge
             GlassEffectContainer(spacing: 12) {
@@ -84,11 +109,10 @@ struct LectureView: View {
                             currentIndex = max(0, safeIndex - 1)
                         }
                     } label: {
-                        Label("Back", systemImage: "chevron.left")
-                            .font(.appBody(size: 17))
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(Theme.textSecondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .frame(width: 44, height: 36)
                             .glassEffect(.regular.interactive())
                     }
                     .disabled(isFirstCard)
@@ -96,19 +120,9 @@ struct LectureView: View {
 
                     Spacer()
 
-                    if cards.count > 1 {
-                        HStack(spacing: 5) {
-                            ForEach(0..<cards.count, id: \.self) { index in
-                                Capsule()
-                                    .fill(index == safeIndex ? Theme.accent : Theme.borderSubtle)
-                                    .frame(width: index == safeIndex ? 14 : 5, height: 5)
-                                    .onTapGesture {
-                                        withAnimation(.easeOut(duration: 0.15)) {
-                                            currentIndex = index
-                                        }
-                                    }
-                            }
-                        }
+                    // Voice tutor controls (Gemini Live + Ask Question)
+                    if let tutor = model.voiceTutor {
+                        VoiceControlBar(tutor: tutor)
                     }
 
                     Spacer()
@@ -116,14 +130,14 @@ struct LectureView: View {
                     if isLastCard && showQuizButton {
                         Button(action: onQuizMe) {
                             HStack(spacing: 4) {
-                                Text("Quiz me")
+                                Text("Quiz")
                                     .font(.appBody(size: 17, weight: .medium))
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
                         }
                         .buttonStyle(.glassProminent)
                         .tint(Theme.accentStrong)
@@ -133,22 +147,18 @@ struct LectureView: View {
                                 currentIndex = min(cards.count - 1, safeIndex + 1)
                             }
                         } label: {
-                            HStack(spacing: 4) {
-                                Text("Next")
-                                    .font(.appBody(size: 17))
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundStyle(Theme.textSecondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .glassEffect(.regular.interactive())
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(Theme.textSecondary)
+                                .frame(width: 44, height: 36)
+                                .glassEffect(.regular.interactive())
                         }
                         .disabled(isLastCard)
                         .opacity(isLastCard ? 0.4 : 1)
                     }
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
@@ -169,12 +179,22 @@ struct LectureView: View {
         // read aloud (kickoff on first, then on each flip).
         .onAppear {
             model.voiceTutorCardsChanged(all: cards, current: cards[safeIndex])
+            // Generate illustrations for saved lectures (not streaming)
+            if !isStreaming {
+                imageGenerator.generateImages(for: cards)
+            }
         }
         .onChange(of: safeIndex) {
             model.voiceTutorCardsChanged(all: cards, current: cards[min(currentIndex, cards.count - 1)])
         }
         .onChange(of: cards.count) {
             model.voiceTutorCardsChanged(all: cards, current: cards[min(currentIndex, cards.count - 1)])
+        }
+        .onChange(of: isStreaming) {
+            // Kick off image generation once the lecture finishes streaming
+            if !isStreaming {
+                imageGenerator.generateImages(for: cards)
+            }
         }
     }
 

@@ -120,8 +120,8 @@ enum Prompts {
         """
 
         if !previousQuestions.isEmpty {
-            prompt += "\n\nCRITICAL: To ensure variety, do NOT ask about the same facts, concepts, or details tested in the following questions that have already been generated for this quiz. Focus on a completely different aspect of the explanation:\n"
-                + previousQuestions.map { "- \($0)" }.joined(separator: "\n")
+            prompt += "\n\nCRITICAL — NO REPEAT QUESTIONS: The following questions have ALREADY been asked in this quiz. You MUST NOT repeat or rephrase any of them. Your new question MUST test a COMPLETELY DIFFERENT fact, concept, or detail from the explanation. If the same topic was already tested, pick an entirely different angle or a different section of the explanation:\n"
+                + previousQuestions.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
         }
 
         return prompt
