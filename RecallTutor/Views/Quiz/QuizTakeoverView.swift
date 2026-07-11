@@ -35,6 +35,11 @@ struct QuizTakeoverView: View {
     @State private var loadError: String?
     @State private var questionStartedAt = Date()
     @State private var prefetchedQuestion: QuizQuestion?
+    /// The in-flight prefetch for the next question. handleNext awaits this
+    /// instead of racing a duplicate request against it — the loser of that
+    /// race used to linger in prefetchedQuestion and get shown verbatim as
+    /// the following question.
+    @State private var prefetchTask: Task<Void, Never>?
     @State private var generatedQuestions: [String] = []
     @State private var introLine = Prompts.professorIntroLines.randomElement()!
     @State private var feedbackTask: Task<Void, Never>?
@@ -534,8 +539,9 @@ struct QuizTakeoverView: View {
 
         // Pre-fetch the next question while the student reads feedback.
         let nextIndex = questionIndex + 1
+        prefetchedQuestion = nil
         if nextIndex < Self.questionsPerRound {
-            Task {
+            prefetchTask = Task {
                 prefetchedQuestion = try? await fetchQuestion(at: nextIndex)
             }
         }
@@ -599,6 +605,15 @@ struct QuizTakeoverView: View {
         feedback = ""
         questionIndex = nextIndex
         reviewingIndex = nil
+
+        // If the prefetch is still in flight, wait for it rather than firing
+        // a second request for the same question.
+        if prefetchedQuestion == nil, let task = prefetchTask {
+            isLoading = true
+            await task.value
+            isLoading = false
+        }
+        prefetchTask = nil
 
         if let prefetched = prefetchedQuestion {
             currentQuestion = prefetched
