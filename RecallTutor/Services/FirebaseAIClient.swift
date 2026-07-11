@@ -1,6 +1,7 @@
 import FirebaseAI
 import FirebaseCore
 import Foundation
+import UIKit
 
 /// Errors from the built-in (Firebase-managed) AI tier.
 enum ManagedAIError: LocalizedError {
@@ -157,6 +158,34 @@ enum FirebaseAIClient {
             responseTimeSeconds: responseTimeSeconds
         )
         return textStream(model: model, contents: [ModelContent(role: "user", parts: prompt)])
+    }
+
+    // MARK: - Card image generation
+
+    /// Image model on the managed tier. The Firebase AI Logic googleAI
+    /// backend supports Gemini image output via `gemini-2.5-flash-image`
+    /// (Nano Banana) with image response modality.
+    private static let imageModel = "gemini-2.5-flash-image"
+
+    /// Generate one card illustration. The Firebase counterpart of
+    /// CardImageGenerator's raw Interactions API call.
+    static func generateCardImage(prompt: String) async throws -> UIImage {
+        let model = FirebaseAI.firebaseAI(backend: .googleAI()).generativeModel(
+            modelName: imageModel,
+            generationConfig: GenerationConfig(
+                responseModalities: [.text, .image],
+                // Matches the Interactions API's "3:2" request (see
+                // CardImageGenerator.aspectRatio) so illustrations look the
+                // same regardless of which backend generated them.
+                imageConfig: ImageConfig(aspectRatio: .landscape3x2)
+            )
+        )
+        let response = try await model.generateContent(prompt)
+        guard let part = response.inlineDataParts.first(where: { $0.mimeType.hasPrefix("image/") }),
+              let image = UIImage(data: part.data) else {
+            throw ManagedAIError.emptyResponse
+        }
+        return image
     }
 
     // MARK: - Topic generation

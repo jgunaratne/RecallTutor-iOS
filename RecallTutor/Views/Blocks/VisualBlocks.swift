@@ -307,6 +307,11 @@ struct CardIllustrationView: View {
 
     @State private var shimmerPhase: CGFloat = -1
 
+    /// Both states render their image box at this exact height (and share
+    /// the same caption row below) so swapping from placeholder to final
+    /// image never reflows the card.
+    private static let boxHeight: CGFloat = 240
+
     var body: some View {
         if isGenerating {
             shimmerPlaceholder
@@ -318,58 +323,69 @@ struct CardIllustrationView: View {
     // MARK: - Shimmer loading state
 
     private var shimmerPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Theme.page)
-            .frame(height: 180)
-            .frame(maxWidth: .infinity)
-            .overlay(
-                GeometryReader { geo in
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(
-                            LinearGradient(
-                                colors: [.clear, Theme.accent.opacity(0.06), .clear],
-                                startPoint: .leading,
-                                endPoint: .trailing
+        VStack(alignment: .trailing, spacing: 6) {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Theme.page)
+                .frame(maxWidth: .infinity, minHeight: Self.boxHeight, maxHeight: Self.boxHeight)
+                .overlay(
+                    GeometryReader { geo in
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(
+                                LinearGradient(
+                                    colors: [.clear, Theme.accent.opacity(0.06), .clear],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
-                        .frame(width: geo.size.width * 0.5)
-                        .offset(x: shimmerPhase * geo.size.width)
-                }
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                VStack(spacing: 8) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Theme.accent.opacity(0.5))
-                    Text("Generating illustration…")
-                        .font(.appBody(size: 13))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.borderSoft, lineWidth: 0.5)
-            )
-            .onAppear {
-                withAnimation(
-                    .easeInOut(duration: 1.5)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    shimmerPhase = 1.2
-                }
+                            .frame(width: geo.size.width * 0.5)
+                            .offset(x: shimmerPhase * geo.size.width)
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    VStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Theme.accent.opacity(0.5))
+                        Text("Generating illustration…")
+                            .font(.appBody(size: 13))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Theme.borderSoft, lineWidth: 0.5)
+                )
+
+            // Reserves the same space as generatedImage(_:)'s caption row,
+            // invisible here, so the total height matches exactly.
+            captionRow.opacity(0)
+        }
+        .onAppear {
+            withAnimation(
+                .easeInOut(duration: 1.5)
+                .repeatForever(autoreverses: false)
+            ) {
+                shimmerPhase = 1.2
             }
+        }
     }
 
     // MARK: - Rendered image
 
     private func generatedImage(_ uiImage: UIImage) -> some View {
         VStack(alignment: .trailing, spacing: 6) {
+            // .fill + .clipped, not .fit: both image backends now request the
+            // same 3:2 aspect ratio, but .fit would still letterbox any
+            // mismatch inside this frame while the border below strokes the
+            // full frame — leaving a visible gap between the image edge and
+            // the border. .fill crops to completely cover the frame instead,
+            // so the border always sits flush against the image.
             Image(uiImage: uiImage)
                 .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .frame(maxHeight: 240)
+                .aspectRatio(contentMode: .fill)
+                .frame(maxWidth: .infinity, minHeight: Self.boxHeight, maxHeight: Self.boxHeight)
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
@@ -377,15 +393,19 @@ struct CardIllustrationView: View {
                 )
                 .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
 
-            HStack(spacing: 4) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 10))
-                Text("AI illustration")
-                    .font(.appBody(size: 11))
-            }
-            .foregroundStyle(Theme.textTertiary.opacity(0.6))
+            captionRow
         }
         .transition(.opacity.combined(with: .scale(scale: 0.97)))
+    }
+
+    private var captionRow: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 10))
+            Text("AI illustration")
+                .font(.appBody(size: 11))
+        }
+        .foregroundStyle(Theme.textTertiary.opacity(0.6))
     }
 }
 

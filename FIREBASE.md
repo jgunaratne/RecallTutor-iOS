@@ -37,7 +37,28 @@ is simply never configured and all account/subscription UI stays hidden.
   - Console → **Build → AI Logic** → set up the **Gemini Developer API**
     backend (the code uses `FirebaseAI.firebaseAI(backend: .googleAI())`).
 
-- [ ] **5. Local subscription testing.**
+- [ ] **5. Enable Cloud Firestore (user database).**
+  - Console → **Build → Firestore Database → Create database** (production
+    mode). Signed-in users are stored in the **`recall-tutor-users`**
+    collection (one doc per Firebase UID: profile, `isPro` subscription flag,
+    free-lecture usage).
+  - Set the security rules so each user can only touch their own doc:
+
+    ```
+    rules_version = '2';
+    service cloud.firestore {
+      match /databases/{database}/documents {
+        match /recall-tutor-users/{uid} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+      }
+    }
+    ```
+
+  - To comp a user Pro access manually, set `isPro: true` on their doc in the
+    console — the app honors the server-side grant on next launch/sign-in.
+
+- [ ] **6. Local subscription testing.**
   - A ready-to-use StoreKit configuration is at **`RecallTutor.storekit`**
     (product `com.gunaratne.recalltutor.promonthly`, $4.99/month).
   - Xcode: **Product → Scheme → Edit Scheme → Run → Options → StoreKit
@@ -47,7 +68,7 @@ is simply never configured and all account/subscription UI stays hidden.
     Lecture Count** button in Settings → Subscription.
   - Set the configuration back to **None** before archiving for release.
 
-- [ ] **6. (For shipping) Create the subscription in App Store Connect.**
+- [ ] **7. (For shipping) Create the subscription in App Store Connect.**
   - Product ID **`com.gunaratne.recalltutor.promonthly`** (must match
     `SubscriptionManager.swift` and `RecallTutor.storekit` exactly),
     auto-renewable, 1 month.
@@ -63,6 +84,7 @@ is simply never configured and all account/subscription UI stays hidden.
 | --- | --- |
 | Google sign-in / auth state | `RecallTutor/Services/AuthManager.swift` |
 | Free-tier metering + StoreKit 2 purchase/restore | `RecallTutor/Services/SubscriptionManager.swift` |
+| Firestore user docs (`recall-tutor-users/{uid}`) | `RecallTutor/Services/UserStatsService.swift` |
 | Managed Gemini generation (lectures, quiz, reactions) | `RecallTutor/Services/FirebaseAIClient.swift` |
 | Provider routing (`.anthropic` / `.gemini` / `.firebase`) | `RecallTutor/Services/GeminiClient.swift` (`AIService`) |
 | Metering gate on new lectures | `RecallTutor/Services/ChatModel.swift` (`runExchange`) |
@@ -76,9 +98,12 @@ Rules of the meter (mirrors podchat):
   follow-ups, quizzes, and reactions on an already-counted lecture are free.
 - The free limit is one constant: `SubscriptionManager.freeLectureLimit` (3).
 - Pro subscribers and personal-API-key users are never metered.
-- Usage is stored per-Firebase-UID in UserDefaults, so accounts on the same
-  device don't share the allowance. (Unlike podchat there is no Firestore
-  sync yet — a reinstall resets the local count.)
-- The voice tutor (Gemini Live) and card illustrations still require a
-  personal Gemini API key; the built-in tier covers lectures, quizzes, and
-  reactions.
+- Usage is stored per-Firebase-UID in UserDefaults **and** mirrored to the
+  user's `recall-tutor-users` Firestore doc, so a reinstall or device change
+  can't reset the count (local ∪ server union on sign-in, like podchat).
+- The subscription status (`isPro`) is pushed to Firestore after every
+  StoreKit check, and a server-side `isPro: true` (set manually in the
+  console) grants Pro in the app.
+- The voice tutor (Gemini Live) and card illustrations work on the built-in
+  tier too: voice via the Firebase AI Live API, images via
+  `gemini-2.5-flash-image` on the same googleAI backend — no key needed.

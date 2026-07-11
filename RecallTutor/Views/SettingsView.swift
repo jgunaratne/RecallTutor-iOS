@@ -102,6 +102,12 @@ struct SettingsView: View {
             .task {
                 if AuthManager.isFirebaseConfigured, auth.isSignedIn {
                     await subscriptions.refreshStatus()
+                    // refreshStatus() only pushes StoreKit status to Firestore
+                    // and re-pulls the Pro flag — it doesn't refresh free-tier
+                    // usage, so "Free lectures used" below could otherwise show
+                    // a stale local count if another device used a slot since
+                    // the last sync.
+                    await subscriptions.syncWithFirestore()
                 }
             }
             .sheet(isPresented: $showPaywall) {

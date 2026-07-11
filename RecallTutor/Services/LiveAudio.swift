@@ -103,14 +103,24 @@ final class LiveAudioPlayer {
         didSet { applyVolume() }
     }
 
+    /// Makeup gain applied to unducked playback. 1.5 was tuned against the
+    /// raw WebSocket model's (gemini-3.1-flash-live-preview) output loudness
+    /// — the web app's makeup gain. The Firebase native-audio model has a
+    /// different loudness profile; the same 1.5x pushed it past full scale
+    /// and clipped (audibly "raspy"), so VoiceTutorManager sets this lower
+    /// for that backend.
+    var gain: Float = 1.5 {
+        didSet { applyVolume() }
+    }
+
     private func applyVolume() {
-        node.volume = muted ? 0 : (ducked ? 1.0 : 1.5) // 1.5 = web app's makeup gain
+        node.volume = muted ? 0 : (ducked ? 1.0 : gain)
     }
 
     init() {
         engine.attach(node)
         engine.connect(node, to: engine.mainMixerNode, format: format)
-        node.volume = 1.5
+        node.volume = gain
     }
 
     func playChunk(_ base64: String) {

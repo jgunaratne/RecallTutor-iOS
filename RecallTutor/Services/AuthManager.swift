@@ -71,7 +71,12 @@ final class AuthManager: NSObject {
                     // Reload per-UID free-tier usage and entitlements so
                     // accounts on the same device stay isolated.
                     SubscriptionManager.shared.loadLocalUsage()
+                    // Upsert the recall-tutor-users profile doc, then pull
+                    // server-side usage + Pro grant so reinstalls can't
+                    // reset the free-tier count.
+                    UserStatsService.shared.registerCurrentUser()
                     await SubscriptionManager.shared.refreshStatus()
+                    await SubscriptionManager.shared.syncWithFirestore()
                 }
             }
         }

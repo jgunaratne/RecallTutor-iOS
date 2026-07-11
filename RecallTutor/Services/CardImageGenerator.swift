@@ -3,9 +3,14 @@ import Observation
 import UIKit
 
 /// Generates illustrative images for lecture cards using Gemini's
-/// Nano Banana Flash Lite image model (gemini-3.1-flash-lite-image)
-/// via the Interactions API. Manages an in-memory cache so images
+/// Nano Banana image models. Manages an in-memory cache so images
 /// survive card-swipe navigation within a single lecture session.
+///
+/// Two backends (same selection rule as VoiceTutorManager):
+/// - **Interactions API** (raw REST, gemini-3.1-flash-image): when the
+///   user has a personal Gemini API key.
+/// - **Firebase AI SDK** (gemini-2.5-flash-image): when no key is
+///   configured — signed-in users on the built-in tier get images too.
 ///
 /// Usage: create one instance per lecture, call `generateImages(for:)`
 /// once streaming finishes, and query `images[cardIndex]` to render.
@@ -30,7 +35,11 @@ final class CardImageGenerator {
     /// Kick off image generation for eligible cards. Safe to call
     /// repeatedly — already-cached or in-flight indices are skipped.
     func generateImages(for cards: [String]) {
-        guard Keychain.loadKey(.gemini) != nil else { return }
+        // Personal key → raw Interactions API; otherwise the Firebase AI
+        // tier can generate too, but it's account-bound (needs sign-in).
+        let canGenerate = Keychain.loadKey(.gemini) != nil
+            || (FirebaseAIClient.isAvailable && AuthManager.shared.isSignedIn)
+        guard canGenerate else { return }
         let eligible = Self.imageIndices(for: cards)
         for index in eligible {
             guard images[index] == nil,
@@ -45,7 +54,7 @@ final class CardImageGenerator {
                     tasks.removeValue(forKey: index)
                 }
                 do {
-                    let image = try await Self.callImageGen(cardContent: content)
+                    let image = try await Self.generate(cardContent: content)
                     if !Task.isCancelled {
                         images[index] = image
                     }
@@ -81,6 +90,37 @@ final class CardImageGenerator {
         return Set(ranked.map(\.offset))
     }
 
+    // MARK: - Backend selection
+
+    /// Route to whichever image backend the user's setup supports.
+    private static func generate(cardContent: String) async throws -> UIImage {
+        if Keychain.loadKey(.gemini) != nil {
+            return try await callImageGen(cardContent: cardContent)
+        }
+        return try await FirebaseAIClient.generateCardImage(
+            prompt: illustrationPrompt(for: cardContent)
+        )
+    }
+
+    /// Aspect ratio requested from both image backends — landscape 3:2,
+    /// close to the card illustration's display frame (see
+    /// CardIllustrationView) so there's minimal letterboxing either way.
+    static let aspectRatio = "3:2"
+
+    /// Build a focused illustration prompt from the card text. Shared by
+    /// both backends so the visual style stays consistent.
+    private static func illustrationPrompt(for cardContent: String) -> String {
+        """
+        Create a simple, clean educational illustration that visually \
+        represents the key concept described below. Use a flat design \
+        style with soft, harmonious colors on a light background. Do not \
+        include any text, labels, or words in the image. The illustration \
+        should be conceptual and elegant:
+
+        \(String(cardContent.prefix(600)))
+        """
+    }
+
     // MARK: - Gemini Interactions API (Nano Banana)
 
     /// Nano Banana 2 — the versatile workhorse image model.
@@ -95,24 +135,19 @@ final class CardImageGenerator {
             throw ImageGenError.noKey
         }
 
-        // Build a focused illustration prompt from the card text.
-        let prompt = """
-        Create a simple, clean educational illustration that visually \
-        represents the key concept described below. Use a flat design \
-        style with soft, harmonious colors on a light background. Do not \
-        include any text, labels, or words in the image. The illustration \
-        should be conceptual and elegant:
-
-        \(String(cardContent.prefix(600)))
-        """
+        let prompt = illustrationPrompt(for: cardContent)
 
         // Interactions API format per
         // https://ai.google.dev/gemini-api/docs/image-generation
+        // response_format.aspect_ratio pins the output to match the Firebase
+        // backend's request (see FirebaseAIClient.generateCardImage) — left
+        // unset, each model version defaults to a different canvas shape.
         let body: [String: Any] = [
             "model": imageModel,
             "input": [
                 ["type": "text", "text": prompt],
             ],
+            "response_format": ["type": "image", "aspect_ratio": aspectRatio],
         ]
 
         var request = URLRequest(

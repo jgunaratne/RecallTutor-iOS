@@ -209,6 +209,13 @@ final class FirebaseLiveBackend {
 
     private func scheduleReconnect() {
         guard status != .connecting else { return }
+        // A single drop can report through two paths — the goingAwayNotice
+        // message and the receive loop's own exit right after — which would
+        // otherwise schedule two independent timers. The second one's
+        // cleanupSession() can then tear down the session the first one just
+        // (re)established, producing a connect→drop→connect loop. Only one
+        // reconnect may be pending at a time.
+        guard reconnectTask == nil else { return }
         guard reconnectAttempts < Self.maxReconnectAttempts else {
             status = .error
             onError?("Voice connection lost")
@@ -222,6 +229,7 @@ final class FirebaseLiveBackend {
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }
+            self.reconnectTask = nil
             self.cleanupSession()
             self.connect()
         }
