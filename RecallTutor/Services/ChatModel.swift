@@ -45,6 +45,10 @@ final class ChatModel {
     // Home screen topic chips
     var visibleTopics: [Topic] = []
     var visibleProTopics: [Topic] = []
+    // True while a "More" tap is generating fresh topics via the AI — the
+    // button shows a spinner. Static-catalog refills are instant and never set these.
+    var isLoadingMoreTopics = false
+    var isLoadingMoreProTopics = false
 
     // Snapshot of the last failed exchange so the error banner can offer Retry.
     private var retrySnapshot: [ChatMessage]?
@@ -380,8 +384,10 @@ final class ChatModel {
     }
 
     func loadMoreTopics() {
+        guard !isLoadingMoreTopics else { return }
         let existing = Set(visibleTopics.map(\.prompt))
         if hasAPIKey {
+            isLoadingMoreTopics = true
             Task {
                 if let generated = try? await AIService.generateTopics(
                     provider: provider,
@@ -393,6 +399,7 @@ final class ChatModel {
                 } else {
                     visibleTopics += TopicCatalog.pickTopics(level: readingLevel, excluding: existing)
                 }
+                isLoadingMoreTopics = false
             }
         } else {
             visibleTopics += TopicCatalog.pickTopics(level: readingLevel, excluding: existing)
@@ -400,8 +407,10 @@ final class ChatModel {
     }
 
     func loadMoreProTopics() {
+        guard !isLoadingMoreProTopics else { return }
         let existing = Set(visibleProTopics.map(\.prompt))
         if hasAPIKey {
+            isLoadingMoreProTopics = true
             Task {
                 if let generated = try? await AIService.generateTopics(
                     provider: provider,
@@ -413,6 +422,7 @@ final class ChatModel {
                 } else {
                     visibleProTopics += TopicCatalog.pickProfessionalTopics(excluding: existing)
                 }
+                isLoadingMoreProTopics = false
             }
         } else {
             visibleProTopics += TopicCatalog.pickProfessionalTopics(excluding: existing)

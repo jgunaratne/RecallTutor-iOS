@@ -20,10 +20,18 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                         sectionDivider("Education")
-                        topicGrid(model.visibleTopics, onLoadMore: { model.loadMoreTopics() })
+                        topicGrid(
+                            model.visibleTopics,
+                            isLoadingMore: model.isLoadingMoreTopics,
+                            onLoadMore: { model.loadMoreTopics() }
+                        )
 
                         sectionDivider("Jobs & Careers")
-                        topicGrid(model.visibleProTopics, onLoadMore: { model.loadMoreProTopics() })
+                        topicGrid(
+                            model.visibleProTopics,
+                            isLoadingMore: model.isLoadingMoreProTopics,
+                            onLoadMore: { model.loadMoreProTopics() }
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
@@ -55,7 +63,7 @@ struct HomeView: View {
         }
     }
 
-    private func topicGrid(_ topics: [Topic], onLoadMore: @escaping () -> Void) -> some View {
+    private func topicGrid(_ topics: [Topic], isLoadingMore: Bool, onLoadMore: @escaping () -> Void) -> some View {
         let status = model.topicStatus
         return GlassEffectContainer(spacing: 8) {
             FlowLayout(spacing: 8) {
@@ -66,16 +74,26 @@ struct HomeView: View {
                 }
                 Button(action: onLoadMore) {
                     HStack(spacing: 4) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13))
-                        Text("More")
-                            .font(.appBody(size: 17))
+                        if isLoadingMore {
+                            // Small, unlike the full-screen spinners: it has to
+                            // fit inside the chip without changing its height.
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(Theme.textTertiary)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 13))
+                            Text("More")
+                                .font(.appBody(size: 17))
+                        }
                     }
+                    .frame(minHeight: 22)
                     .foregroundStyle(Theme.textTertiary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .glassEffect(.regular.interactive())
                 }
+                .disabled(isLoadingMore)
             }
         }
     }
