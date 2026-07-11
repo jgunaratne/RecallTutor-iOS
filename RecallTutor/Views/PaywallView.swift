@@ -109,6 +109,18 @@ struct PaywallView: View {
         )
     }
 
+    // Required by App Store guideline 3.1.2(c) — a paid auto-renewable
+    // subscription must link to both a Privacy Policy and Terms of Use.
+    // Update the privacy URL once it's actually hosted (see APPSTORE_TODO.md).
+    private var legalLinks: some View {
+        HStack(spacing: 16) {
+            Link("Privacy Policy", destination: URL(string: "https://gunaratne.com/recall-tutor/privacy")!)
+            Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+        }
+        .font(.appBody(size: 12, weight: .medium))
+        .foregroundStyle(Theme.accent)
+    }
+
     @ViewBuilder
     private var purchaseSection: some View {
         VStack(spacing: 12) {
@@ -131,6 +143,8 @@ struct PaywallView: View {
                     .font(.appBody(size: 12))
                     .foregroundStyle(Theme.textTertiary)
                     .multilineTextAlignment(.center)
+
+                legalLinks
             } else if manager.isLoading {
                 ProgressView()
                     .padding(.vertical, 16)
