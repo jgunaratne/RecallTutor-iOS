@@ -295,7 +295,12 @@ final class ChatModel {
     /// Creates and auto-connects the tutor on the first cards of a lecture
     /// (web parity: the overlay auto-connects on mount).
     func voiceTutorCardsChanged(all: [String], current: String?) {
-        guard Keychain.loadKey(.gemini) != nil else { return }
+        // Voice works with a Gemini key (raw WebSocket) or, without one, via
+        // the Firebase AI tier — which is account-bound, so it needs sign-in.
+        // Mirrors the backend selection in VoiceTutorManager.connect().
+        let canUseVoice = Keychain.loadKey(.gemini) != nil
+            || (FirebaseAIClient.isAvailable && AuthManager.shared.isSignedIn)
+        guard canUseVoice else { return }
         let topic = messages.first(where: { $0.role == .user })?.content ?? ""
         guard !topic.isEmpty else { return }
 

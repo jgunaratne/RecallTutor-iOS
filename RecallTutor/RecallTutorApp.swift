@@ -8,6 +8,7 @@ struct RecallTutorApp: App {
     @State private var hasCompletedOnboarding = UserDefaults.standard.bool(
         forKey: "recalltutor_has_completed_onboarding"
     )
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         Self.registerBundledFonts()
@@ -45,6 +46,14 @@ struct RecallTutorApp: App {
                     .environment(chatModel)
                     .preferredColorScheme(.light)
             }
+        }
+        // syncWithFirestore() otherwise only runs once at cold launch (via
+        // AuthManager's auth-state listener) — a long-lived session that
+        // uses the built-in tier on a second device meanwhile would drift
+        // until the app is force-quit. Re-pull on every foreground instead.
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active, AuthManager.isFirebaseConfigured, AuthManager.shared.isSignedIn else { return }
+            Task { await SubscriptionManager.shared.syncWithFirestore() }
         }
     }
 }

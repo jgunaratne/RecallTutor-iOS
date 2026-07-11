@@ -44,11 +44,16 @@ final class SubscriptionManager {
     /// persists at the Apple-ID level.
     var isPro: Bool {
         guard AuthManager.shared.isSignedIn else { return false }
-        return hasActiveSubscription || manualProOverrideEnabled
+        return hasActiveSubscription || manualProOverrideEnabled || remoteProEntitlement
     }
 
     /// True when StoreKit reports a current, non-revoked entitlement to Pro.
     private(set) var hasActiveSubscription = false
+
+    /// Server-side Pro grant from the user's `recall-tutor-users` Firestore
+    /// doc (`isPro`) — e.g. set manually in the Firebase console. Hydrated on
+    /// sign-in and on every status refresh.
+    private(set) var remoteProEntitlement = false
 
     /// Available products from the App Store / StoreKit configuration.
     var products: [Product] = []
@@ -110,10 +115,18 @@ final class SubscriptionManager {
         // New lecture but no headroom left → block (caller surfaces the paywall).
         if hasReachedFreeLimit { return false }
 
-        // New lecture with headroom → consume a slot.
+        // New lecture with headroom → consume a slot, locally and server-side
+        // (so the count survives reinstalls and device changes).
         usedFreeLectureIDs.insert(lectureID)
-        UserDefaults.standard.set(Array(usedFreeLectureIDs), forKey: usedLectureIDsKey)
+        persistUsedLectureIDs()
+        UserStatsService.shared.recordFreeLectureUse(
+            lectureID: lectureID, totalUsed: usedFreeLectureIDs.count
+        )
         return true
+    }
+
+    private func persistUsedLectureIDs() {
+        UserDefaults.standard.set(Array(usedFreeLectureIDs), forKey: usedLectureIDsKey)
     }
 
     /// Reset the free allowance. Used by the DEBUG settings tools.
@@ -199,6 +212,54 @@ final class SubscriptionManager {
             }
         }
         hasActiveSubscription = hasActive
+
+        // Honor a server-side Pro grant (e.g. set manually in the Firebase
+        // console): fold it in *before* writing back so we never overwrite a
+        // manual `isPro = true` with a StoreKit-derived false.
+        await hydrateRemoteProEntitlement()
+
+        // Push the latest subscription status to Firestore so the server
+        // record is always current. This runs after every StoreKit check.
+        UserStatsService.shared.syncSubscriptionStatus(
+            isPro: isPro,
+            productID: hasActive ? SubscriptionProduct.proMonthly : nil
+        )
+    }
+
+    // MARK: - Firestore sync
+
+    /// Pull the server-stored Pro entitlement (`recall-tutor-users/{uid}.isPro`)
+    /// into ``remoteProEntitlement``. A missing doc/field leaves it unchanged.
+    private func hydrateRemoteProEntitlement() async {
+        if let serverIsPro = await UserStatsService.shared.fetchSubscriptionStatus() {
+            remoteProEntitlement = serverIsPro
+        }
+    }
+
+    /// Hydrate local free-tier usage from Firestore. Called once at sign-in
+    /// so the counter survives reinstalls and works across devices. Takes the
+    /// **union** of local and server sets so neither side can lose a used slot.
+    func syncWithFirestore() async {
+        // Honor a server-side Pro grant immediately on sign-in / launch.
+        await hydrateRemoteProEntitlement()
+
+        let serverIDs = await UserStatsService.shared.fetchUsedLectureIDs()
+        if !serverIDs.isEmpty {
+            // Merge: local ∪ server (never shrink the set).
+            let merged = usedFreeLectureIDs.union(serverIDs)
+            if merged != usedFreeLectureIDs {
+                usedFreeLectureIDs = merged
+                persistUsedLectureIDs()
+            }
+        }
+
+        // Also push local-only IDs to Firestore (e.g. from before Firestore
+        // was integrated) so the server set catches up.
+        for id in usedFreeLectureIDs where !serverIDs.contains(id) {
+            UserStatsService.shared.recordFreeLectureUse(
+                lectureID: id, totalUsed: usedFreeLectureIDs.count
+            )
+        }
     }
 
     /// Clear subscription state on sign-out so the next sign-in starts fresh.
@@ -206,6 +267,7 @@ final class SubscriptionManager {
     /// back in and recover their local count.
     func resetForSignOut() {
         hasActiveSubscription = false
+        remoteProEntitlement = false
         products = []
         errorMessage = nil
         showPaywall = false

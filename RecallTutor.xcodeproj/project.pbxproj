@@ -10,6 +10,7 @@
 		B20000010000000000000001 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B20000020000000000000001 /* FirebaseAuth */; };
 		B20000030000000000000001 /* FirebaseAI in Frameworks */ = {isa = PBXBuildFile; productRef = B20000040000000000000001 /* FirebaseAI */; };
 		B20000050000000000000001 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B20000060000000000000001 /* GoogleSignIn */; };
+		B20000090000000000000001 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B200000A0000000000000001 /* FirebaseFirestore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 				B20000010000000000000001 /* FirebaseAuth in Frameworks */,
 				B20000030000000000000001 /* FirebaseAI in Frameworks */,
 				B20000050000000000000001 /* GoogleSignIn in Frameworks */,
+				B20000090000000000000001 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +79,7 @@
 				B20000020000000000000001 /* FirebaseAuth */,
 				B20000040000000000000001 /* FirebaseAI */,
 				B20000060000000000000001 /* GoogleSignIn */,
+				B200000A0000000000000001 /* FirebaseFirestore */,
 			);
 			productName = RecallTutor;
 			productReference = A10000020000000000000001 /* RecallTutor.app */;
@@ -313,6 +316,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B20000080000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignIn;
+		};
+		B200000A0000000000000001 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000070000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

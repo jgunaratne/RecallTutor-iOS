@@ -19,7 +19,20 @@ final class VoiceTutorManager {
     // Chosen once per lecture so reconnects keep the same voice.
     private let sessionVoice: String
 
-    private(set) var status: LiveSessionStatus = .idle
+    private(set) var status: LiveSessionStatus = .idle {
+        didSet {
+            // A card change that arrives while still connecting (common on
+            // the slower Firebase backend) used to be silently dropped by
+            // updateCards' guard below, with nothing to retry it once the
+            // connection completed — the tutor would just stay silent until
+            // the next flip. Replay whatever was last requested as soon as
+            // we're actually connected.
+            guard status == .connected, oldValue != .connected,
+                  let pending = pendingCardUpdate else { return }
+            pendingCardUpdate = nil
+            updateCards(all: pending.all, current: pending.current)
+        }
+    }
     private(set) var isMicOpen = false
     private(set) var isSpeaking = false
     private(set) var errorMessage: String?
@@ -76,6 +89,10 @@ final class VoiceTutorManager {
     private var sentQuiz: String?
     private var sentAnswer: String?
     private var sentQuizResult: String?
+    // The most recent updateCards(all:current:) call received while not yet
+    // .connected — replayed once the connection completes (see status'
+    // didSet) instead of being silently dropped.
+    private var pendingCardUpdate: (all: [String], current: String?)?
     // Pause tutor audio from the moment the quiz opens until its first
     // question is injected — the model is usually mid-turn on a card
     // explanation, and its remaining chunks would talk over the quiz intro.
@@ -106,6 +123,10 @@ final class VoiceTutorManager {
 
         let player = LiveAudioPlayer()
         player.muted = isMuted
+        // The 1.5x makeup gain was tuned for the WebSocket model's voice
+        // output; Firebase's native-audio model is louder and clips at that
+        // gain (audible as raspy/distorted), so it gets no boost.
+        player.gain = hasAPIKey ? 1.5 : 1.0
         player.onPlaybackStart = { [weak self] in
             guard let self else { return }
             if self.isMicOpen, Date().timeIntervalSince(self.micOpenedAt) > 1.0 {
@@ -246,6 +267,7 @@ final class VoiceTutorManager {
         sentQuizResult = nil
         hasKickedOff = false
         hasIntroduced = false
+        pendingCardUpdate = nil
         status = .idle
         isSpeaking = false
         LiveAudioSession.deactivate()
@@ -287,7 +309,10 @@ final class VoiceTutorManager {
     /// seeding once the conversation starts), and reads the visible card
     /// aloud on the first show and on each flip.
     func updateCards(all: [String], current: String?) {
-        guard status == .connected else { return }
+        guard status == .connected else {
+            pendingCardUpdate = (all, current)
+            return
+        }
 
         if !hasKickedOff {
             for (index, card) in all.enumerated() where !sentCards.contains(card) {
