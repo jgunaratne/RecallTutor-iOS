@@ -89,9 +89,14 @@ struct ChatView: View {
 
     private var header: some View {
         ZStack {
-            Text("Recall Tutor")
-                .font(.serifDisplay(size: 22))
-                .foregroundStyle(Theme.textPrimary)
+            HStack(spacing: 8) {
+                Image(systemName: "graduationcap.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Theme.accentGradient)
+                Text("Recall Tutor")
+                    .font(.serifDisplay(size: 22))
+                    .foregroundStyle(Theme.textPrimary)
+            }
 
             HStack {
                 Button {
