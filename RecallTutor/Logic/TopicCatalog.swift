@@ -126,18 +126,31 @@ enum TopicCatalog {
     ]
 
     /// Pick `count` random topics from the pool for the given reading level,
-    /// excluding prompts already shown.
+    /// excluding prompts already shown. Recycles if pool runs dry.
     static func pickTopics(level: ReadingLevel, count: Int = 8, excluding exclude: Set<String> = []) -> [Topic] {
-        pools[level]!
-            .filter { !exclude.contains($0.prompt) }
+        let pool = pools[level]!
+        let filtered = pool.filter { !exclude.contains($0.prompt) }
+        if filtered.count < count {
+            let extraNeeded = count - filtered.count
+            let recycled = pool.shuffled().prefix(extraNeeded).map { $0 }
+            return filtered + recycled
+        }
+        return filtered
             .shuffled()
             .prefix(count)
             .map { $0 }
     }
 
+    /// Pick `count` random professional topics, excluding prompts already shown. Recycles if pool runs dry.
     static func pickProfessionalTopics(count: Int = 8, excluding exclude: Set<String> = []) -> [Topic] {
-        professionalTopics
-            .filter { !exclude.contains($0.prompt) }
+        let pool = professionalTopics
+        let filtered = pool.filter { !exclude.contains($0.prompt) }
+        if filtered.count < count {
+            let extraNeeded = count - filtered.count
+            let recycled = pool.shuffled().prefix(extraNeeded).map { $0 }
+            return filtered + recycled
+        }
+        return filtered
             .shuffled()
             .prefix(count)
             .map { $0 }
