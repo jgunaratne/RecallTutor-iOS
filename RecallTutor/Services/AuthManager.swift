@@ -1,18 +1,20 @@
+import AuthenticationServices
+import CryptoKit
 import FirebaseAuth
 import FirebaseCore
 import Foundation
 import GoogleSignIn
 import SwiftUI
 
-/// Manages Firebase Authentication state for Google Sign-In (ported from
-/// podchat's AuthManager, trimmed to the Google-only flow this app uses).
+/// Manages Firebase Authentication state for Sign in with Apple and Google
+/// Sign-In (ported from podchat's AuthManager).
 ///
 /// Signing in unlocks the built-in (managed) Gemini tier — lectures without a
 /// personal API key. Every operation no-ops with a helpful error when Firebase
 /// isn't configured (no GoogleService-Info.plist in the bundle), so the app
 /// keeps working in key-only mode until the console setup is done.
 @MainActor @Observable
-final class AuthManager {
+final class AuthManager: NSObject {
     static let shared = AuthManager()
 
     // MARK: - Published state
@@ -45,10 +47,15 @@ final class AuthManager {
     /// True once FirebaseApp.configure() has run (GoogleService-Info.plist present).
     static var isFirebaseConfigured: Bool { FirebaseApp.app() != nil }
 
+    // MARK: - Apple Sign-In state
+
+    /// Nonce used for the current Apple Sign-In request.
+    private var currentNonce: String?
     private var isConfigured = false
 
-    private init() {
+    private override init() {
         hasSkippedSignIn = UserDefaults.standard.bool(forKey: Self.skippedSignInKey)
+        super.init()
     }
 
     /// Must be called after `FirebaseApp.configure()`. Safe to call when
@@ -68,6 +75,30 @@ final class AuthManager {
                 }
             }
         }
+    }
+
+    // MARK: - Sign in with Apple
+
+    /// Initiates the Sign in with Apple flow.
+    func signInWithApple() {
+        guard Self.isFirebaseConfigured else {
+            errorMessage = "Firebase isn't set up yet. Add GoogleService-Info.plist to the app (see FIREBASE.md)."
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+
+        let nonce = randomNonceString()
+        currentNonce = nonce
+
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(nonce)
+
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+        controller.performRequests()
     }
 
     // MARK: - Google Sign-In
@@ -144,6 +175,104 @@ final class AuthManager {
             SubscriptionManager.shared.resetForSignOut()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Helpers
+
+    /// Generate a cryptographically secure random nonce for Apple Sign-In.
+    private func randomNonceString(length: Int = 32) -> String {
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        var result = ""
+        var remainingLength = length
+
+        while remainingLength > 0 {
+            var randomBytes = [UInt8](repeating: 0, count: 16)
+            let status = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+            guard status == errSecSuccess else { continue }
+
+            for byte in randomBytes where remainingLength > 0 {
+                let index = Int(byte) % charset.count
+                result.append(charset[index])
+                remainingLength -= 1
+            }
+        }
+
+        return result
+    }
+
+    /// SHA-256 hash of the input string, returned as a hex string.
+    private func sha256(_ input: String) -> String {
+        let data = Data(input.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+// MARK: - ASAuthorizationControllerDelegate
+
+extension AuthManager: ASAuthorizationControllerDelegate {
+    nonisolated func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        Task { @MainActor in
+            defer { isLoading = false }
+
+            guard let appleCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let identityToken = appleCredential.identityToken,
+                  let tokenString = String(data: identityToken, encoding: .utf8)
+            else {
+                errorMessage = "Unable to retrieve Apple credentials."
+                return
+            }
+
+            guard let nonce = currentNonce else {
+                errorMessage = "Invalid state: no nonce found."
+                return
+            }
+
+            let credential = OAuthProvider.appleCredential(
+                withIDToken: tokenString,
+                rawNonce: nonce,
+                fullName: appleCredential.fullName
+            )
+
+            do {
+                let authResult = try await Auth.auth().signIn(with: credential)
+                user = authResult.user
+                hasSkippedSignIn = false
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    nonisolated func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithError error: Error
+    ) {
+        Task { @MainActor in
+            isLoading = false
+            // Don't show error for user cancellation.
+            if (error as NSError).code != ASAuthorizationError.canceled.rawValue {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+// MARK: - ASAuthorizationControllerPresentationContextProviding
+
+extension AuthManager: ASAuthorizationControllerPresentationContextProviding {
+    nonisolated func presentationAnchor(
+        for controller: ASAuthorizationController
+    ) -> ASPresentationAnchor {
+        MainActor.assumeIsolated {
+            let scene = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive }
+            return scene?.keyWindow ?? ASPresentationAnchor()
         }
     }
 }
