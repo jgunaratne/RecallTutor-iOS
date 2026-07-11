@@ -84,18 +84,19 @@ enum CardSplitter {
 
         flushCard()
 
-        // Drop a trailing title-only card — a truncation artifact.
-        if cards.count > 1 {
-            let lastLines = cards[cards.count - 1]
-                .components(separatedBy: "\n")
+        // Drop any title-only card — a heading or "Card N:" label with
+        // nothing under it. Most often a truncation artifact at the end of
+        // a stream, but two headers can also land back-to-back mid-lecture
+        // with no body between them, so this must check every card, not
+        // just the last one, or it renders as a visually blank card.
+        cards = cards.filter { card in
+            let lines = card.components(separatedBy: "\n")
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
-            if lastLines.count == 1,
-               matches(sectionHeadingRE, lastLines[0])
-                || matches(boldTitleRE, lastLines[0])
-                || matches(cardHeaderRE, lastLines[0]) {
-                cards.removeLast()
-            }
+            guard lines.count == 1 else { return true }
+            return !(matches(sectionHeadingRE, lines[0])
+                || matches(boldTitleRE, lines[0])
+                || matches(cardHeaderRE, lines[0]))
         }
 
         return cards.filter { !$0.isEmpty }
