@@ -43,9 +43,9 @@ enum Prompts {
 
     1. CHART — for quantities, metrics, comparisons, trends, or distributions. A fenced block with language tag "chart" containing ONLY one JSON object:
     ```chart
-    {"type": "bar", "title": "Chart title", "xLabel": "X axis", "yLabel": "Y axis", "data": [{"label": "A", "value": 30}, {"label": "B", "value": 55}]}
+    {"type": "bar", "title": "Chart title", "xLabel": "X axis", "yLabel": "Y axis", "unit": "%", "data": [{"label": "A", "value": 30}, {"label": "B", "value": 55}]}
     ```
-    "type" is "bar", "line", or "pie". Use 3-8 data points with realistic values. For "line", order the points along the x-axis progression. Keep every "label" SHORT — 1-2 words, at most 12 characters (abbreviate if needed) — so axis labels stay readable on a phone screen.
+    "type" is "bar", "line", or "pie". Use 3-8 data points with realistic values. ALWAYS include "unit" — the unit of measurement for the values ("%", "$", "km", "kg", "GB", "years", "people") — so the reader knows what the numbers mean; prefer a short symbol or abbreviation. Omit "unit" only when the values are unitless counts. For "line", order the points along the x-axis progression. Keep every "label" SHORT — 1-2 words, at most 12 characters (abbreviate if needed) — so axis labels stay readable on a phone screen.
 
     2. FLOW — for workflows, processes, lifecycles, sequences, or causal chains. A fenced block with language tag "flow" containing ONLY one JSON object:
     ```flow

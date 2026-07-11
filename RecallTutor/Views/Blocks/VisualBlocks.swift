@@ -17,6 +17,7 @@ struct ChartSpec: Decodable {
     var title: String?
     var xLabel: String?
     var yLabel: String?
+    var unit: String?
     var data: [Point]
 }
 
@@ -56,6 +57,52 @@ struct ChartBlockView: View {
         }
     }
 
+    /// Value with its unit — "30%", "$30", "30 km". Units the model omitted
+    /// stay plain numbers (older saved lectures have no "unit" field).
+    private func valueText(_ value: Double, unit: String?) -> String {
+        let number = value.formatted()
+        guard let unit = unit?.trimmingCharacters(in: .whitespaces), !unit.isEmpty else {
+            return number
+        }
+        if unit == "%" { return number + unit }
+        if ["$", "€", "£", "¥"].contains(unit) { return unit + number }
+        return "\(number) \(unit)"
+    }
+
+    /// Annotation text for a data point. On axis charts only compact symbols
+    /// ride along with every value ("30%", not "30 people" eight times over) —
+    /// wordier units live in the axis title instead. Pie charts have no axis,
+    /// so there the unit always accompanies the value.
+    private func annotationText(_ value: Double, _ spec: ChartSpec, alwaysUnit: Bool = false) -> String {
+        let unit = spec.unit?.trimmingCharacters(in: .whitespaces) ?? ""
+        if alwaysUnit || unit.count <= 3 {
+            return valueText(value, unit: unit)
+        }
+        return value.formatted()
+    }
+
+    /// Title for the value axis, folding the unit into the label —
+    /// "Population (millions)", or just the unit when there's no label.
+    private func valueAxisTitle(_ spec: ChartSpec) -> String? {
+        let unit = spec.unit?.trimmingCharacters(in: .whitespaces) ?? ""
+        if let label = spec.yLabel, !label.isEmpty {
+            if unit.isEmpty || label.localizedCaseInsensitiveContains(unit) {
+                return label
+            }
+            return "\(label) (\(unit))"
+        }
+        return unit.isEmpty ? nil : unit
+    }
+
+    @ViewBuilder
+    private func axisTitleText(_ spec: ChartSpec) -> some View {
+        if let title = valueAxisTitle(spec) {
+            Text(title)
+                .font(.appBody(size: 12))
+                .foregroundStyle(Theme.textTertiary)
+        }
+    }
+
     /// Category labels collide when there are many of them or they're long.
     /// Bars flip horizontal and line charts rotate their labels in that case.
     private func labelsAreCrowded(_ spec: ChartSpec) -> Bool {
@@ -77,9 +124,12 @@ struct ChartBlockView: View {
             }
             return 190
         default: // bar
-            // Horizontal bars grow with the row count.
+            // Horizontal bars grow with the row count, plus a line below the
+            // plot for the value-axis title (vertical charts put the title on
+            // the leading edge, which costs width, not height).
+            let axisTitle: CGFloat = valueAxisTitle(spec) != nil ? 18 : 0
             return labelsAreCrowded(spec)
-                ? CGFloat(spec.data.count) * 34 + 30
+                ? CGFloat(spec.data.count) * 34 + 30 + axisTitle
                 : 190
         }
     }
@@ -99,7 +149,7 @@ struct ChartBlockView: View {
                 .foregroundStyle(by: .value("Label", point.label))
                 .cornerRadius(3)
                 .annotation(position: .overlay) {
-                    Text(point.value.formatted())
+                    Text(annotationText(point.value, spec, alwaysUnit: true))
                         .font(.appBody(size: 11, weight: .bold))
                         .foregroundStyle(.white)
                 }
@@ -120,7 +170,7 @@ struct ChartBlockView: View {
                 )
                 .foregroundStyle(chartPalette[0])
                 .annotation(position: .top) {
-                    Text(point.value.formatted())
+                    Text(annotationText(point.value, spec))
                         .font(.appBody(size: 11))
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -134,6 +184,9 @@ struct ChartBlockView: View {
                         .font(.appBody(size: 13))
                 }
             }
+            .chartYAxisLabel(position: .leading, alignment: .center) {
+                axisTitleText(spec)
+            }
         default: // bar
             if crowded {
                 // Horizontal bars: every category label gets its own row at
@@ -146,12 +199,15 @@ struct ChartBlockView: View {
                     .foregroundStyle(chartPalette[index % chartPalette.count])
                     .cornerRadius(3)
                     .annotation(position: .trailing) {
-                        Text(point.value.formatted())
+                        Text(annotationText(point.value, spec))
                             .font(.appBody(size: 11, weight: .medium))
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
                 .chartYAxis { AxisMarks { AxisValueLabel().font(.appBody(size: 13)) } }
+                .chartXAxisLabel(alignment: .center) {
+                    axisTitleText(spec)
+                }
             } else {
                 Chart(points, id: \.offset) { index, point in
                     BarMark(
@@ -161,12 +217,15 @@ struct ChartBlockView: View {
                     .foregroundStyle(chartPalette[index % chartPalette.count])
                     .cornerRadius(3)
                     .annotation(position: .top) {
-                        Text(point.value.formatted())
+                        Text(annotationText(point.value, spec))
                             .font(.appBody(size: 11, weight: .medium))
                             .foregroundStyle(Theme.textSecondary)
                     }
                 }
                 .chartXAxis { AxisMarks { AxisValueLabel().font(.appBody(size: 13)) } }
+                .chartYAxisLabel(position: .leading, alignment: .center) {
+                    axisTitleText(spec)
+                }
             }
         }
     }
