@@ -14,6 +14,11 @@ struct HomeView: View {
                     Spacer(minLength: 28)
 
                     VStack(spacing: 24) {
+                        Text("Select a topic to learn more about it.")
+                            .font(.appBody(size: 15))
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
                         sectionDivider("Education")
                         topicGrid(model.visibleTopics, onLoadMore: { model.loadMoreTopics() })
 
