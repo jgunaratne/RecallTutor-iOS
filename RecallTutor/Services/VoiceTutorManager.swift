@@ -40,6 +40,9 @@ final class VoiceTutorManager {
     // while still letting a card be spoken again on every return flip.
     private var lastSpokenCard: String?
     private var hasKickedOff = false
+    // Survives reconnects (unlike hasKickedOff): a session rebuilt after an
+    // error should resume the lecture, not re-run the topic introduction.
+    private var hasIntroduced = false
     private var sentQuiz: String?
     private var sentAnswer: String?
     private var sentQuizResult: String?
@@ -58,6 +61,14 @@ final class VoiceTutorManager {
     func connect() {
         guard status == .idle || status == .error else { return }
         errorMessage = nil
+
+        // Reconnect-from-error: tear down the previous session and player
+        // first, or each retry leaks a running audio engine and a session
+        // whose callbacks still write into this manager.
+        session?.disconnect()
+        session = nil
+        closeMic()
+        player?.stop()
 
         LiveAudioSession.activate()
 
@@ -78,7 +89,14 @@ final class VoiceTutorManager {
                 guard let self else { return }
                 self.status = status
                 if status == .error { self.isSpeaking = false }
-                if status != .connected { self.closeMic() }
+                if status != .connected {
+                    if self.isMicOpen {
+                        // The connection dropped mid-question; the half-sent
+                        // turn is lost, so tell the student to re-ask.
+                        self.errorMessage = "Connection dropped — ask again"
+                    }
+                    self.closeMic()
+                }
             },
             onAudioChunk: { [weak self] base64 in
                 guard let self, !self.suppressAudio else { return }
@@ -123,6 +141,7 @@ final class VoiceTutorManager {
         sentAnswer = nil
         sentQuizResult = nil
         hasKickedOff = false
+        hasIntroduced = false
         status = .idle
         isSpeaking = false
         LiveAudioSession.deactivate()
@@ -152,13 +171,21 @@ final class VoiceTutorManager {
 
         if !hasKickedOff {
             hasKickedOff = true
+            let resuming = hasIntroduced
+            hasIntroduced = true
             // Small delay to let the seeded context settle.
             Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let self, self.status == .connected else { return }
-                self.session?.sendText(
-                    "[FIRST CARD]\n\(current)\n\nBegin now. Start by giving a brief, enthusiastic introduction to the topic, then explain the content of this first card. Keep it conversational and engaging. Do NOT greet me or say hello."
-                )
+                if resuming {
+                    self.session?.sendText(
+                        "[RECONNECTED MID-LECTURE — CURRENT CARD]\n\(current)\n\nThe voice connection dropped and was just restored partway through this lecture. Pick up naturally from this card — do NOT re-introduce the topic, greet me, or start over. Briefly continue explaining this card's content."
+                    )
+                } else {
+                    self.session?.sendText(
+                        "[FIRST CARD]\n\(current)\n\nBegin now. Start by giving a brief, enthusiastic introduction to the topic, then explain the content of this first card. Keep it conversational and engaging. Do NOT greet me or say hello."
+                    )
+                }
             }
         } else {
             // Cut off the previous card's audio so the tutor tracks the flip

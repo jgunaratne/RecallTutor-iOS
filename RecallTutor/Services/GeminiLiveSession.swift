@@ -66,6 +66,10 @@ final class GeminiLiveSession {
     /// Send raw microphone audio (base64-encoded PCM16 16 kHz). Safe to call
     /// from any thread via nonisolated send below.
     func sendAudio(_ base64Data: String) {
+        // Sending realtime input before setupComplete is a protocol error —
+        // it kills the fresh socket during a GoAway reconnect while in-flight
+        // mic chunks are still arriving.
+        guard status == .connected else { return }
         lastAudioSentAt = Date()
         send(["realtimeInput": ["audio": ["data": base64Data, "mimeType": "audio/pcm;rate=16000"]]])
     }
@@ -73,12 +77,14 @@ final class GeminiLiveSession {
     /// Tell the server the mic was turned off, so voice activity detection
     /// commits the user's turn instead of waiting for trailing silence.
     func sendAudioStreamEnd() {
+        guard status == .connected else { return }
         send(["realtimeInput": ["audioStreamEnd": true]])
     }
 
     /// Seed context without triggering a model response. Only honoured
     /// before the first sendText — after that, fold context into sendText.
     func sendContext(_ text: String) {
+        guard status == .connected else { return }
         send([
             "clientContent": [
                 "turns": [["role": "user", "parts": [["text": text]]]],
@@ -89,6 +95,7 @@ final class GeminiLiveSession {
 
     /// Send text that triggers a model response.
     func sendText(_ text: String) {
+        guard status == .connected else { return }
         send([
             "clientContent": [
                 "turns": [["role": "user", "parts": [["text": text]]]],
@@ -184,6 +191,11 @@ final class GeminiLiveSession {
             guard epoch == sessionEpoch else { return }
             stopKeepalive()
 
+            // The server's real error arrives as the WebSocket close reason —
+            // without this log every failure looks like "connection lost".
+            let closeReason = task.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            print("[GeminiLive] socket closed: code=\(task.closeCode.rawValue) reason=\(closeReason) goAway=\(goAwayReceived) attempts=\(reconnectAttempts) error=\(error.localizedDescription)")
+
             // Attempt transparent reconnection on GoAway (or unexpected drop
             // mid-session), resuming context via the resumption handle.
             if (goAwayReceived || status == .connected), reconnectAttempts < Self.maxGoAwayReconnects {
@@ -192,7 +204,7 @@ final class GeminiLiveSession {
                 return
             }
             if status == .connected || status == .connecting {
-                handleError("Voice connection lost")
+                handleError(closeReason.isEmpty ? "Voice connection lost" : "Voice connection lost: \(closeReason)")
             }
         }
     }
