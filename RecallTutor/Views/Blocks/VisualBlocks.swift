@@ -163,3 +163,96 @@ struct FlowBlockView: View {
     }
 }
 
+// MARK: - AI-generated card illustration (Nano Banana Flash Lite)
+
+/// Displays a Gemini-generated illustration for a lecture card.
+/// Shows a shimmer placeholder while the image is being generated,
+/// then cross-fades to the rendered result.
+struct CardIllustrationView: View {
+    let image: UIImage?
+    let isGenerating: Bool
+
+    @State private var shimmerPhase: CGFloat = -1
+
+    var body: some View {
+        if isGenerating {
+            shimmerPlaceholder
+        } else if let image {
+            generatedImage(image)
+        }
+    }
+
+    // MARK: - Shimmer loading state
+
+    private var shimmerPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Theme.page)
+            .frame(height: 180)
+            .frame(maxWidth: .infinity)
+            .overlay(
+                GeometryReader { geo in
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, Theme.accent.opacity(0.06), .clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: geo.size.width * 0.5)
+                        .offset(x: shimmerPhase * geo.size.width)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                VStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Theme.accent.opacity(0.5))
+                    Text("Generating illustration…")
+                        .font(.appBody(size: 13))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Theme.borderSoft, lineWidth: 0.5)
+            )
+            .onAppear {
+                withAnimation(
+                    .easeInOut(duration: 1.5)
+                    .repeatForever(autoreverses: false)
+                ) {
+                    shimmerPhase = 1.2
+                }
+            }
+    }
+
+    // MARK: - Rendered image
+
+    private func generatedImage(_ uiImage: UIImage) -> some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .frame(maxHeight: 240)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Theme.borderSubtle, lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
+
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10))
+                Text("AI illustration")
+                    .font(.appBody(size: 11))
+            }
+            .foregroundStyle(Theme.textTertiary.opacity(0.6))
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+    }
+}
+

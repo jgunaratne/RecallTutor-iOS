@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Compact voice-tutor controls — speaker mute/unmute (or connect), and an
-/// "Ask Question" mic pill while connected. Lives in the lecture card header
-/// and teleports into the quiz header while the quiz is open.
+/// "Ask Question" mic pill while connected. Lives in the lecture card bottom
+/// navigation bar and teleports into the quiz header while the quiz is open.
 struct VoiceControlBar: View {
     let tutor: VoiceTutorManager
 
@@ -32,27 +32,26 @@ struct VoiceControlBar: View {
                 tutor.connect()
             }
         } label: {
-            ZStack {
+            Group {
+                if tutor.status == .connecting {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(Theme.accent)
+                } else {
+                    Image(systemName: speakerIcon)
+                        .font(.system(size: 17, weight: .medium))
+                }
+            }
+            .foregroundStyle(speakerTint)
+            .frame(width: 44, height: 36)
+            .glassEffect(.regular.tint(speakerFill).interactive())
+            .background {
                 if tutor.isSpeaking && !tutor.isMuted {
-                    Circle()
+                    Capsule()
                         .fill(Theme.accent.opacity(0.3))
                         .modifier(PulseEffect())
                 }
-                Group {
-                    if tutor.status == .connecting {
-                        ProgressView()
-                            .controlSize(.mini)
-                            .tint(Theme.accent)
-                    } else {
-                        Image(systemName: speakerIcon)
-                            .font(.system(size: 17))
-                            .foregroundStyle(speakerTint)
-                    }
-                }
-                .frame(width: 30, height: 30)
-                .glassEffect(.regular.tint(speakerFill).interactive(), in: .circle)
             }
-            .frame(width: 30, height: 30)
         }
         .disabled(tutor.status == .connecting)
         .accessibilityLabel(speakerAccessibilityLabel)
@@ -63,6 +62,14 @@ struct VoiceControlBar: View {
         case .connected: tutor.isMuted ? "Unmute voice tutor" : "Mute voice tutor"
         case .connecting: "Connecting voice tutor"
         default: "Start voice tutor"
+        }
+    }
+
+    private var speakerLabel: String {
+        switch tutor.status {
+        case .connected: tutor.isMuted ? "Muted" : "Live"
+        case .connecting: "…"
+        default: "Gemini"
         }
     }
 
@@ -92,25 +99,20 @@ struct VoiceControlBar: View {
         Button {
             tutor.toggleMic()
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: tutor.isMicOpen ? "mic.fill" : "mic.slash")
-                    .font(.system(size: 13))
-                Text(tutor.isMicOpen ? "Listening…" : "Ask Question")
-                    .font(.appBody(size: 13, weight: .medium))
-            }
-            .foregroundStyle(tutor.isMicOpen ? Color.red : Theme.textTertiary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .glassEffect(
-                .regular.tint(tutor.isMicOpen ? Color.red.opacity(0.12) : .clear).interactive()
-            )
-            .overlay {
-                if tutor.isMicOpen {
-                    Capsule()
-                        .stroke(Color.red.opacity(0.4), lineWidth: 1.5)
-                        .modifier(PulseEffect())
+            Image(systemName: tutor.isMicOpen ? "mic.fill" : "mic.slash")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(tutor.isMicOpen ? Color.red : Theme.textSecondary)
+                .frame(width: 44, height: 36)
+                .glassEffect(
+                    .regular.tint(tutor.isMicOpen ? Color.red.opacity(0.12) : .clear).interactive()
+                )
+                .overlay {
+                    if tutor.isMicOpen {
+                        Capsule()
+                            .stroke(Color.red.opacity(0.4), lineWidth: 1.5)
+                            .modifier(PulseEffect())
+                    }
                 }
-            }
         }
     }
 }

@@ -77,15 +77,17 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        let anthropic = anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let gemini = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
                         model.saveKeys(
-                            anthropic: anthropic.isEmpty ? nil : anthropic,
-                            gemini: gemini.isEmpty ? nil : gemini
+                            anthropic: anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines),
+                            gemini: geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
                         )
                         dismiss()
                     }
                 }
+            }
+            .onAppear {
+                anthropicKey = Keychain.loadKey(.anthropic) ?? ""
+                geminiKey = Keychain.loadKey(.gemini) ?? ""
             }
         }
     }
