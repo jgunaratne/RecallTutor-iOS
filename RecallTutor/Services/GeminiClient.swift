@@ -195,6 +195,67 @@ struct GeminiClient {
         ]
         return streamText(model: GeminiModels.quizReact, body: body)
     }
+
+    // MARK: - Topic generation
+
+    private static let topicsSchema: [String: Any] = [
+        "type": "OBJECT",
+        "properties": [
+            "topics": [
+                "type": "ARRAY",
+                "description": "A list of 8 topics generated for the user.",
+                "items": [
+                    "type": "OBJECT",
+                    "properties": [
+                        "label": ["type": "STRING", "description": "Short label, max 3 words"],
+                        "prompt": ["type": "STRING", "description": "The exact prompt/question to ask the tutor"]
+                    ],
+                    "required": ["label", "prompt"]
+                ]
+            ]
+        ],
+        "required": ["topics"]
+    ]
+
+    static func generateTopics(
+        category: String,
+        readingLevel: ReadingLevel,
+        excluding: Set<String>
+    ) async throws -> [Topic] {
+        let body: [String: Any] = [
+            "contents": [
+                [
+                    "role": "user",
+                    "parts": [["text": Prompts.topicGenerationUserPrompt(excluding: excluding)]]
+                ]
+            ],
+            "systemInstruction": ["parts": [["text": Prompts.topicGenerationSystemPrompt(category: category, level: readingLevel)]]],
+            "generationConfig": [
+                "responseMimeType": "application/json",
+                "responseSchema": topicsSchema
+            ]
+        ]
+
+        struct ResponseEnvelope: Decodable {
+            var topics: [Topic]
+        }
+
+        return try await withFallback(GeminiModels.chat) { model in
+            let request = try makeRequest(model: model, action: "generateContent", body: body)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw AnthropicError.badResponse }
+            guard http.statusCode == 200 else {
+                throw AnthropicError.from(status: http.statusCode, body: data)
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let text = candidateText(json),
+                  let topicsData = text.data(using: .utf8) else {
+                throw AnthropicError.badResponse
+            }
+            let envelope = try JSONDecoder().decode(ResponseEnvelope.self, from: topicsData)
+            return envelope.topics
+        }
+    }
 }
 
 // MARK: - Provider dispatch
@@ -270,6 +331,28 @@ enum AIService {
             FirebaseAIClient.streamReaction(
                 question: question, chosen: chosen, correct: correct,
                 wasCorrect: wasCorrect, streak: streak, responseTimeSeconds: responseTimeSeconds
+            )
+        }
+    }
+
+    static func generateTopics(
+        provider: AIProvider,
+        category: String,
+        readingLevel: ReadingLevel,
+        excluding: Set<String>
+    ) async throws -> [Topic] {
+        switch provider {
+        case .anthropic:
+            try await AnthropicClient.generateTopics(
+                category: category, readingLevel: readingLevel, excluding: excluding
+            )
+        case .gemini:
+            try await GeminiClient.generateTopics(
+                category: category, readingLevel: readingLevel, excluding: excluding
+            )
+        case .firebase:
+            try await FirebaseAIClient.generateTopics(
+                category: category, readingLevel: readingLevel, excluding: excluding
             )
         }
     }

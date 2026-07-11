@@ -28,7 +28,9 @@ final class ChatModel {
     var readingLevel: ReadingLevel {
         didSet {
             UserDefaults.standard.set(readingLevel.rawValue, forKey: "recalltutor_reading_level")
-            visibleTopics = TopicCatalog.pickTopics(level: readingLevel)
+            Task {
+                await loadInitialTopics()
+            }
         }
     }
     var provider: AIProvider {
@@ -80,6 +82,9 @@ final class ChatModel {
         conversations = HistoryStore.load()
         visibleTopics = TopicCatalog.pickTopics(level: readingLevel)
         visibleProTopics = TopicCatalog.pickProfessionalTopics()
+        Task {
+            await loadInitialTopics()
+        }
         #if DEBUG
         // UI-testing hook: auto-open the most recent conversation.
         if ProcessInfo.processInfo.environment["RECALLTUTOR_AUTOSELECT"] != nil,
@@ -342,14 +347,71 @@ final class ChatModel {
         }
     }
 
+    func loadInitialTopics() async {
+        // Static fallbacks are already loaded synchronously in init(), but we
+        // ensure we have them if readingLevel changed.
+        visibleTopics = TopicCatalog.pickTopics(level: readingLevel)
+        visibleProTopics = TopicCatalog.pickProfessionalTopics()
+
+        guard hasAPIKey else { return }
+
+        if let generated = try? await AIService.generateTopics(
+            provider: provider,
+            category: "Education",
+            readingLevel: readingLevel,
+            excluding: []
+        ) {
+            visibleTopics = generated
+        }
+
+        if let generatedPro = try? await AIService.generateTopics(
+            provider: provider,
+            category: "Jobs & Careers",
+            readingLevel: readingLevel,
+            excluding: []
+        ) {
+            visibleProTopics = generatedPro
+        }
+    }
+
     func loadMoreTopics() {
         let existing = Set(visibleTopics.map(\.prompt))
-        visibleTopics += TopicCatalog.pickTopics(level: readingLevel, excluding: existing)
+        if hasAPIKey {
+            Task {
+                if let generated = try? await AIService.generateTopics(
+                    provider: provider,
+                    category: "Education",
+                    readingLevel: readingLevel,
+                    excluding: existing
+                ) {
+                    visibleTopics += generated
+                } else {
+                    visibleTopics += TopicCatalog.pickTopics(level: readingLevel, excluding: existing)
+                }
+            }
+        } else {
+            visibleTopics += TopicCatalog.pickTopics(level: readingLevel, excluding: existing)
+        }
     }
 
     func loadMoreProTopics() {
         let existing = Set(visibleProTopics.map(\.prompt))
-        visibleProTopics += TopicCatalog.pickProfessionalTopics(excluding: existing)
+        if hasAPIKey {
+            Task {
+                if let generated = try? await AIService.generateTopics(
+                    provider: provider,
+                    category: "Jobs & Careers",
+                    readingLevel: readingLevel,
+                    excluding: existing
+                ) {
+                    visibleProTopics += generated
+                } else {
+                    visibleProTopics += TopicCatalog.pickProfessionalTopics(excluding: existing)
+                }
+            }
+        } else {
+            visibleProTopics += TopicCatalog.pickProfessionalTopics(excluding: existing)
+        }
     }
 
     // MARK: - Quiz

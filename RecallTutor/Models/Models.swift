@@ -157,7 +157,7 @@ enum AIProvider: String, Codable, CaseIterable, Identifiable {
 
 // MARK: - Topics (port of lib/topics.ts types)
 
-struct Topic: Equatable, Hashable {
+struct Topic: Equatable, Hashable, Codable {
     var label: String
     var prompt: String
 }

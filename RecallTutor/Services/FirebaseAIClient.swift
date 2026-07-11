@@ -158,4 +158,48 @@ enum FirebaseAIClient {
         )
         return textStream(model: model, contents: [ModelContent(role: "user", parts: prompt)])
     }
+
+    // MARK: - Topic generation
+
+    private static let topicsSchema: Schema = .object(
+        properties: [
+            "topics": .array(
+                items: .object(
+                    properties: [
+                        "label": .string(description: "Short label, max 3 words"),
+                        "prompt": .string(description: "The exact prompt/question to ask the tutor")
+                    ]
+                ),
+                description: "A list of 8 topics generated for the user."
+            )
+        ]
+    )
+
+    static func generateTopics(
+        category: String,
+        readingLevel: ReadingLevel,
+        excluding: Set<String>
+    ) async throws -> [Topic] {
+        let model = model(
+            name: GeminiModels.chat,
+            systemPrompt: Prompts.topicGenerationSystemPrompt(category: category, level: readingLevel),
+            config: GenerationConfig(
+                responseMIMEType: "application/json",
+                responseSchema: topicsSchema
+            )
+        )
+
+        struct ResponseEnvelope: Decodable {
+            var topics: [Topic]
+        }
+
+        let response = try await model.generateContent(
+            Prompts.topicGenerationUserPrompt(excluding: excluding)
+        )
+        guard let text = response.text, let data = text.data(using: .utf8) else {
+            throw ManagedAIError.emptyResponse
+        }
+        let envelope = try JSONDecoder().decode(ResponseEnvelope.self, from: data)
+        return envelope.topics
+    }
 }
