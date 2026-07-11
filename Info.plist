@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Google Sign-In callback scheme. Replace both REVERSED_CLIENT_ID values
+	     below with the REVERSED_CLIENT_ID from your GoogleService-Info.plist
+	     (looks like com.googleusercontent.apps.1234567890-abcdef). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>REVERSED_CLIENT_ID</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>REVERSED_CLIENT_ID</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

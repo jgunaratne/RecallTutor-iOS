@@ -44,7 +44,7 @@ struct ChartBlockView: View {
                         .foregroundStyle(Theme.textPrimary)
                 }
                 chart(spec)
-                    .frame(height: 190)
+                    .frame(height: chartHeight(spec))
             }
             .padding(14)
             .background(Theme.page.opacity(0.6))
@@ -56,9 +56,38 @@ struct ChartBlockView: View {
         }
     }
 
+    /// Category labels collide when there are many of them or they're long.
+    /// Bars flip horizontal and line charts rotate their labels in that case.
+    private func labelsAreCrowded(_ spec: ChartSpec) -> Bool {
+        let longest = spec.data.map(\.label.count).max() ?? 0
+        let total = spec.data.reduce(0) { $0 + $1.label.count }
+        return spec.data.count > 6 || longest > 8 || total > 32
+    }
+
+    private func chartHeight(_ spec: ChartSpec) -> CGFloat {
+        switch spec.type {
+        case "pie":
+            // Extra room so a bigger wrapped legend never covers the plot.
+            return spec.data.count > 4 ? 230 : 190
+        case "line":
+            // Rotated x labels need extra vertical space below the plot.
+            if labelsAreCrowded(spec) {
+                let longest = spec.data.map(\.label.count).max() ?? 0
+                return 190 + min(CGFloat(longest) * 5, 80)
+            }
+            return 190
+        default: // bar
+            // Horizontal bars grow with the row count.
+            return labelsAreCrowded(spec)
+                ? CGFloat(spec.data.count) * 34 + 30
+                : 190
+        }
+    }
+
     @ViewBuilder
     private func chart(_ spec: ChartSpec) -> some View {
         let points = Array(spec.data.enumerated())
+        let crowded = labelsAreCrowded(spec)
         switch spec.type {
         case "pie":
             Chart(points, id: \.offset) { _, point in
@@ -71,7 +100,7 @@ struct ChartBlockView: View {
                 .cornerRadius(3)
             }
             .chartForegroundStyleScale(range: chartPalette)
-            .chartLegend(position: .bottom, spacing: 8)
+            .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
         case "line":
             Chart(points, id: \.offset) { _, point in
                 LineMark(
@@ -86,17 +115,39 @@ struct ChartBlockView: View {
                 )
                 .foregroundStyle(chartPalette[0])
             }
-            .chartXAxis { AxisMarks { AxisValueLabel().font(.appBody(size: 13)) } }
-        default: // bar
-            Chart(points, id: \.offset) { index, point in
-                BarMark(
-                    x: .value(spec.xLabel ?? "X", point.label),
-                    y: .value(spec.yLabel ?? "Y", point.value)
-                )
-                .foregroundStyle(chartPalette[index % chartPalette.count])
-                .cornerRadius(3)
+            .chartXAxis {
+                AxisMarks { _ in
+                    AxisGridLine()
+                    AxisTick()
+                    // Rotate labels upright-vertical when they'd collide.
+                    AxisValueLabel(orientation: crowded ? .verticalReversed : .horizontal)
+                        .font(.appBody(size: 13))
+                }
             }
-            .chartXAxis { AxisMarks { AxisValueLabel().font(.appBody(size: 13)) } }
+        default: // bar
+            if crowded {
+                // Horizontal bars: every category label gets its own row at
+                // full width, so long labels stay readable instead of colliding.
+                Chart(points, id: \.offset) { index, point in
+                    BarMark(
+                        x: .value(spec.yLabel ?? "Value", point.value),
+                        y: .value(spec.xLabel ?? "Label", point.label)
+                    )
+                    .foregroundStyle(chartPalette[index % chartPalette.count])
+                    .cornerRadius(3)
+                }
+                .chartYAxis { AxisMarks { AxisValueLabel().font(.appBody(size: 13)) } }
+            } else {
+                Chart(points, id: \.offset) { index, point in
+                    BarMark(
+                        x: .value(spec.xLabel ?? "X", point.label),
+                        y: .value(spec.yLabel ?? "Y", point.value)
+                    )
+                    .foregroundStyle(chartPalette[index % chartPalette.count])
+                    .cornerRadius(3)
+                }
+                .chartXAxis { AxisMarks { AxisValueLabel().font(.appBody(size: 13)) } }
+            }
         }
     }
 }
@@ -124,8 +175,11 @@ struct FlowBlockView: View {
                 }
                 ForEach(Array(spec.steps.enumerated()), id: \.offset) { index, step in
                     HStack(spacing: 10) {
+                        // System font: the serif face's metrics sit digits
+                        // visibly off-center inside the circle badge.
                         Text("\(index + 1)")
-                            .font(.appBody(size: 13, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
                             .foregroundStyle(.white)
                             .frame(width: 22, height: 22)
                             .background(Circle().fill(Theme.accent))

@@ -206,6 +206,9 @@ enum AIService {
         var providers: [AIProvider] = []
         if Keychain.loadKey(.anthropic) != nil { providers.append(.anthropic) }
         if Keychain.loadKey(.gemini) != nil { providers.append(.gemini) }
+        // Built-in tier: available whenever the app ships Firebase config;
+        // sign-in and metering are enforced at generation time.
+        if FirebaseAIClient.isAvailable { providers.append(.firebase) }
         return providers
     }
 
@@ -213,6 +216,7 @@ enum AIService {
         switch provider {
         case .anthropic: AnthropicClient.streamChat(messages: messages, readingLevel: readingLevel)
         case .gemini: GeminiClient.streamChat(messages: messages, readingLevel: readingLevel)
+        case .firebase: FirebaseAIClient.streamChat(messages: messages, readingLevel: readingLevel)
         }
     }
 
@@ -231,6 +235,11 @@ enum AIService {
             )
         case .gemini:
             try await GeminiClient.generateQuizQuestion(
+                transcript: transcript, difficulty: difficulty,
+                readingLevel: readingLevel, previousQuestions: previousQuestions
+            )
+        case .firebase:
+            try await FirebaseAIClient.generateQuizQuestion(
                 transcript: transcript, difficulty: difficulty,
                 readingLevel: readingLevel, previousQuestions: previousQuestions
             )
@@ -254,6 +263,11 @@ enum AIService {
             )
         case .gemini:
             GeminiClient.streamReaction(
+                question: question, chosen: chosen, correct: correct,
+                wasCorrect: wasCorrect, streak: streak, responseTimeSeconds: responseTimeSeconds
+            )
+        case .firebase:
+            FirebaseAIClient.streamReaction(
                 question: question, chosen: chosen, correct: correct,
                 wasCorrect: wasCorrect, streak: streak, responseTimeSeconds: responseTimeSeconds
             )

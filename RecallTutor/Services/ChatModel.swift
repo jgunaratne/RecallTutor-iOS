@@ -37,6 +37,9 @@ final class ChatModel {
     var availableProviders: [AIProvider] = []
     var hasAPIKey: Bool { !availableProviders.isEmpty }
 
+    /// Presents the Google sign-in sheet (required for the built-in tier).
+    var showSignIn = false
+
     // Home screen topic chips
     var visibleTopics: [Topic] = []
     var visibleProTopics: [Topic] = []
@@ -176,6 +179,23 @@ final class ChatModel {
     /// Stream one assistant reply for an already-recorded user turn. Kept
     /// separate from sendMessage so a failed exchange can be retried verbatim.
     private func runExchange(_ newMessages: [ChatMessage], convId: UUID) {
+        // The built-in (Firebase) tier is account-bound and metered: 3 free
+        // lectures, then Pro. Continuing an already-counted lecture is free.
+        if provider == .firebase {
+            guard AuthManager.shared.isSignedIn else {
+                errorMessage = ManagedAIError.signInRequired.localizedDescription
+                retrySnapshot = newMessages
+                showSignIn = true
+                return
+            }
+            guard SubscriptionManager.shared.registerManagedLectureUse(lectureID: convId.uuidString) else {
+                errorMessage = ManagedAIError.subscriptionRequired.localizedDescription
+                retrySnapshot = newMessages
+                SubscriptionManager.shared.showPaywall = true
+                return
+            }
+        }
+
         isStreaming = true
         showQuizButton = false
         errorMessage = nil

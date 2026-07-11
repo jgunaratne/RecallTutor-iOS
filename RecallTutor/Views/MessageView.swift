@@ -63,24 +63,33 @@ struct LectureView: View {
             .padding(.top, 14)
             .padding(.bottom, 10)
 
-            // Current card content — fills the screen, scrolls if long
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    // AI-generated illustration (Nano Banana Flash Lite)
-                    CardIllustrationView(
-                        image: imageGenerator.images[safeIndex],
-                        isGenerating: imageGenerator.generating.contains(safeIndex)
-                    )
+            // Card pages — a native paged TabView so swipes track the finger
+            // and Back/Next slide between cards.
+            TabView(selection: Binding(
+                get: { safeIndex },
+                set: { currentIndex = $0 }
+            )) {
+                ForEach(cards.indices, id: \.self) { index in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            // AI-generated illustration (Nano Banana Flash Lite)
+                            CardIllustrationView(
+                                image: imageGenerator.images[index],
+                                isGenerating: imageGenerator.generating.contains(index)
+                            )
 
-                    MarkdownText(content: cards[safeIndex])
+                            MarkdownText(content: cards[index])
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 4)
+                        .padding(.bottom, 20)
+                        .animation(.easeOut(duration: 0.3), value: imageGenerator.images[index] != nil)
+                    }
+                    .tag(index)
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 20)
-                .animation(.easeOut(duration: 0.3), value: imageGenerator.images[safeIndex] != nil)
             }
-            .id(safeIndex)
+            .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Page dots (above the navigation bar)
@@ -91,7 +100,7 @@ struct LectureView: View {
                             .fill(index == safeIndex ? Theme.accent : Theme.borderSubtle)
                             .frame(width: index == safeIndex ? 14 : 5, height: 5)
                             .onTapGesture {
-                                withAnimation(.easeOut(duration: 0.15)) {
+                                withAnimation(.easeOut(duration: 0.25)) {
                                     currentIndex = index
                                 }
                             }
@@ -101,80 +110,70 @@ struct LectureView: View {
                 .padding(.bottom, 4)
             }
 
-            // Floating glass navigation at the card's bottom edge
-            GlassEffectContainer(spacing: 12) {
-                HStack {
+            // Floating liquid-glass navigation bar at the card's bottom edge —
+            // one shared glass capsule holding all controls (podchat player style).
+            HStack {
+                Button {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        currentIndex = max(0, safeIndex - 1)
+                    }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isFirstCard)
+                .opacity(isFirstCard ? 0.4 : 1)
+
+                Spacer()
+
+                // Voice tutor controls (Gemini Live + Ask Question)
+                if let tutor = model.voiceTutor {
+                    VoiceControlBar(tutor: tutor)
+                }
+
+                Spacer()
+
+                if isLastCard && showQuizButton {
+                    Button(action: onQuizMe) {
+                        HStack(spacing: 4) {
+                            Text("Quiz")
+                                .font(.appBody(size: 17, weight: .medium))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .background(Theme.accentStrong, in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                } else {
                     Button {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            currentIndex = max(0, safeIndex - 1)
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            currentIndex = min(cards.count - 1, safeIndex + 1)
                         }
                     } label: {
-                        Image(systemName: "chevron.left")
+                        Image(systemName: "chevron.right")
                             .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(Theme.textSecondary)
-                            .frame(width: 44, height: 36)
-                            .glassEffect(.regular.interactive())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .disabled(isFirstCard)
-                    .opacity(isFirstCard ? 0.4 : 1)
-
-                    Spacer()
-
-                    // Voice tutor controls (Gemini Live + Ask Question)
-                    if let tutor = model.voiceTutor {
-                        VoiceControlBar(tutor: tutor)
-                    }
-
-                    Spacer()
-
-                    if isLastCard && showQuizButton {
-                        Button(action: onQuizMe) {
-                            HStack(spacing: 4) {
-                                Text("Quiz")
-                                    .font(.appBody(size: 17, weight: .medium))
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .tint(Theme.accentStrong)
-                    } else {
-                        Button {
-                            withAnimation(.easeOut(duration: 0.15)) {
-                                currentIndex = min(cards.count - 1, safeIndex + 1)
-                            }
-                        } label: {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(Theme.textSecondary)
-                                .frame(width: 44, height: 36)
-                                .glassEffect(.regular.interactive())
-                        }
-                        .disabled(isLastCard)
-                        .opacity(isLastCard ? 0.4 : 1)
-                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLastCard)
+                    .opacity(isLastCard ? 0.4 : 1)
                 }
             }
-            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .glassEffect(.regular, in: .capsule)
+            .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
-        // Swipe between cards
-        .gesture(
-            DragGesture(minimumDistance: 30)
-                .onEnded { value in
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        if value.translation.width < -40 {
-                            currentIndex = min(cards.count - 1, safeIndex + 1)
-                        } else if value.translation.width > 40 {
-                            currentIndex = max(0, safeIndex - 1)
-                        }
-                    }
-                }
-        )
         // Feed the voice tutor: all cards as context, the visible card to
         // read aloud (kickoff on first, then on each flip).
         .onAppear {
@@ -208,9 +207,10 @@ struct LectureView: View {
                 .foregroundStyle(Theme.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Spacer()
-            HStack(spacing: 10) {
+            VStack(spacing: 16) {
                 ProgressView()
-                    .controlSize(.small)
+                    .controlSize(.large)
+                    .scaleEffect(1.4)
                     .tint(Theme.accent)
                 Text("Preparing lecture notes…")
                     .font(.appBody(size: 17))

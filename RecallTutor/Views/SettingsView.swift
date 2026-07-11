@@ -1,16 +1,26 @@
 import SwiftUI
 
-/// Settings sheet: provider API keys (Keychain-backed), AI provider choice,
+/// Settings sheet: account (Google sign-in for the built-in tutor),
+/// subscription, provider API keys (Keychain-backed), AI provider choice,
 /// and reading level.
 struct SettingsView: View {
     @Environment(ChatModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var anthropicKey = ""
     @State private var geminiKey = ""
+    @State private var auth = AuthManager.shared
+    @State private var subscriptions = SubscriptionManager.shared
+    @State private var showPaywall = false
+    @State private var showManageSubscriptions = false
 
     var body: some View {
         NavigationStack {
             Form {
+                if AuthManager.isFirebaseConfigured {
+                    accountSection
+                    subscriptionSection
+                }
+
                 Section {
                     SecureField("sk-ant-…", text: $anthropicKey)
                         .font(.system(size: 17, design: .monospaced))
@@ -89,6 +99,88 @@ struct SettingsView: View {
                 anthropicKey = Keychain.loadKey(.anthropic) ?? ""
                 geminiKey = Keychain.loadKey(.gemini) ?? ""
             }
+            .task {
+                if AuthManager.isFirebaseConfigured, auth.isSignedIn {
+                    await subscriptions.refreshStatus()
+                }
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
+            .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
+        }
+    }
+
+    // MARK: - Account (built-in tutor)
+
+    private var accountSection: some View {
+        Section {
+            if auth.isSignedIn {
+                LabeledContent("Signed in as", value: auth.email ?? auth.displayName ?? "Google account")
+                Button("Sign Out", role: .destructive) {
+                    auth.signOut()
+                }
+            } else {
+                Button {
+                    auth.signInWithGoogle()
+                } label: {
+                    HStack {
+                        Text("Sign in with Google")
+                        if auth.isLoading {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(auth.isLoading)
+                if let error = auth.errorMessage {
+                    Text(error)
+                        .font(.appBody(size: 13))
+                        .foregroundStyle(Theme.danger)
+                }
+            }
+        } header: {
+            Text("Account")
+        } footer: {
+            Text(auth.isSignedIn
+                 ? "Your account unlocks the built-in tutor — no API key needed."
+                 : "Sign in to use the built-in tutor without an API key (\(SubscriptionManager.freeLectureLimit) free lectures, then Recall Tutor Pro).")
+        }
+    }
+
+    // MARK: - Subscription
+
+    private var subscriptionSection: some View {
+        Section {
+            if subscriptions.isPro {
+                LabeledContent("Status", value: "Active")
+                Button("Manage Subscription") {
+                    showManageSubscriptions = true
+                }
+            } else if auth.isSignedIn {
+                LabeledContent(
+                    "Free lectures used",
+                    value: "\(subscriptions.freeLecturesUsed) of \(SubscriptionManager.freeLectureLimit)"
+                )
+                Button("Subscribe to Recall Tutor Pro") {
+                    showPaywall = true
+                }
+                Button("Restore Purchases") {
+                    Task { await subscriptions.restore() }
+                }
+            }
+            #if DEBUG
+            Toggle("Pro Override (dev)", isOn: $subscriptions.manualProOverrideEnabled)
+            Button("Reset Free Lecture Count (dev)") {
+                subscriptions.resetFreeUsage()
+            }
+            #endif
+        } header: {
+            Text("Subscription")
+        } footer: {
+            Text(subscriptions.isPro
+                 ? "Unlimited built-in lectures and quizzes. Cancellation takes effect at the end of the billing period."
+                 : "Pro removes the \(SubscriptionManager.freeLectureLimit)-lecture limit on the built-in tutor. Your own API keys are never limited.")
         }
     }
 }

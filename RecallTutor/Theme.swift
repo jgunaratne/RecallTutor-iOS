@@ -1,18 +1,19 @@
 import SwiftUI
 
-// Cool slate-and-blue palette (Tailwind slate neutrals, blue accent).
+// Warm sunset palette matching the app icon: stone neutrals with orange
+// accents (bright orange highlights, dark orange for prominent actions).
 enum Theme {
-    static let page = Color(red: 248 / 255, green: 250 / 255, blue: 252 / 255)   // slate-50
+    static let page = Color(red: 252 / 255, green: 249 / 255, blue: 247 / 255)   // warm blush white
     static let surface = Color.white
-    static let userBubble = Color(red: 226 / 255, green: 232 / 255, blue: 240 / 255) // slate-200
-    static let textPrimary = Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255)   // slate-900
-    static let textSecondary = Color(red: 51 / 255, green: 65 / 255, blue: 85 / 255) // slate-700
-    static let textTertiary = Color(red: 71 / 255, green: 85 / 255, blue: 105 / 255)   // slate-600
-    static let accent = Color(red: 59 / 255, green: 130 / 255, blue: 246 / 255)      // blue-500
-    static let accentStrong = Color(red: 37 / 255, green: 99 / 255, blue: 235 / 255) // blue-600
+    static let userBubble = Color(red: 255 / 255, green: 237 / 255, blue: 213 / 255) // orange-100
+    static let textPrimary = Color(red: 28 / 255, green: 25 / 255, blue: 23 / 255)   // stone-900
+    static let textSecondary = Color(red: 68 / 255, green: 64 / 255, blue: 60 / 255) // stone-700
+    static let textTertiary = Color(red: 87 / 255, green: 83 / 255, blue: 78 / 255)    // stone-600
+    static let accent = Color(red: 234 / 255, green: 88 / 255, blue: 12 / 255)       // orange-600
+    static let accentStrong = Color(red: 194 / 255, green: 65 / 255, blue: 12 / 255)  // orange-700
     static let danger = Color(red: 153 / 255, green: 27 / 255, blue: 27 / 255)
-    static let borderSubtle = Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255).opacity(0.15)
-    static let borderSoft = Color(red: 15 / 255, green: 23 / 255, blue: 42 / 255).opacity(0.08)
+    static let borderSubtle = Color(red: 28 / 255, green: 25 / 255, blue: 23 / 255).opacity(0.15)
+    static let borderSoft = Color(red: 28 / 255, green: 25 / 255, blue: 23 / 255).opacity(0.08)
     static let stateHover = textTertiary.opacity(0.08)
     static let statePill = textTertiary.opacity(0.10)
 

@@ -135,81 +135,80 @@ struct QuizTakeoverView: View {
     // MARK: - Bottom navigation bar
 
     private var bottomBar: some View {
-        VStack(spacing: 0) {
-            GlassEffectContainer(spacing: 12) {
-                HStack {
-                    // Back button — go to previous question
-                    Button {
-                        withAnimation(.easeOut(duration: 0.15)) { goBack() }
-                    } label: {
-                        Label("Back", systemImage: "chevron.left")
-                            .font(.appBody(size: 17))
-                            .foregroundStyle(Theme.textSecondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .glassEffect(.regular.interactive())
-                    }
-                    .disabled(!canGoBack)
-                    .opacity(canGoBack ? 1 : 0.4)
-
-                    Spacer()
-
-                    // Voice tutor controls (Gemini Live + Ask Question)
-                    if let tutor = model.voiceTutor {
-                        VoiceControlBar(tutor: tutor)
-                    }
-
-                    Spacer()
-
-                    // Next / forward button
-                    if isReviewing {
-                        Button {
-                            withAnimation(.easeOut(duration: 0.15)) { goForward() }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text("Next")
-                                    .font(.appBody(size: 17))
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundStyle(Theme.textSecondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .glassEffect(.regular.interactive())
-                        }
-                    } else if phase == .reveal {
-                        Button {
-                            Task { await handleNext() }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(questionIndex < Self.questionsPerRound - 1 ? "Next" : "Results")
-                                    .font(.appBody(size: 17, weight: .medium))
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .tint(Theme.accentStrong)
-                    } else {
-                        // Placeholder to keep layout balanced during question phase
-                        Label("Next", systemImage: "chevron.right")
-                            .font(.appBody(size: 17))
-                            .foregroundStyle(Theme.textSecondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .glassEffect(.regular.interactive())
-                            .opacity(0.4)
-                            .allowsHitTesting(false)
-                    }
-                }
+        // One shared liquid-glass capsule holding all controls (podchat player style).
+        HStack {
+            // Back button — go to previous question
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { goBack() }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .buttonStyle(.plain)
+            .disabled(!canGoBack)
+            .opacity(canGoBack ? 1 : 0.4)
+            .accessibilityLabel("Back")
+
+            Spacer()
+
+            // Voice tutor controls (Gemini Live + Ask Question)
+            if let tutor = model.voiceTutor {
+                VoiceControlBar(tutor: tutor)
+            }
+
+            Spacer()
+
+            // Next / forward button
+            if isReviewing {
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) { goForward() }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Next")
+            } else if phase == .reveal {
+                let isLastQuestion = questionIndex >= Self.questionsPerRound - 1
+                Button {
+                    Task { await handleNext() }
+                } label: {
+                    HStack(spacing: 4) {
+                        if isLastQuestion {
+                            Text("Results")
+                                .font(.appBody(size: 17, weight: .medium))
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: isLastQuestion ? 13 : 17, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(Theme.accentStrong, in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isLastQuestion ? "Results" : "Next")
+            } else {
+                // Placeholder to keep layout balanced during question phase
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: 44, height: 44)
+                    .opacity(0.4)
+                    .allowsHitTesting(false)
+            }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: .capsule)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     private var canGoBack: Bool {

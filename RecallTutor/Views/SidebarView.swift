@@ -31,7 +31,7 @@ struct SidebarView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
                         .font(.system(size: 17, weight: .medium))
-                    Text("New chat")
+                    Text("New lecture")
                         .font(.appBody(size: 17, weight: .medium))
                 }
                 .foregroundStyle(Theme.accentStrong)
@@ -82,13 +82,11 @@ struct SidebarView: View {
             Button(action: onOpenSettings) {
                 HStack(spacing: 8) {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 17))
-                    Text("Settings")
-                        .font(.appBody(size: 17))
+                        .font(.system(size: 22))
                     Spacer()
                     Text(model.availableProviders.count > 1
-                         ? "\(model.provider.label) · \(model.readingLevel.label)"
-                         : model.readingLevel.label)
+                         ? "\(model.provider.label) · Reading level: \(model.readingLevel.label)"
+                         : "Reading level: \(model.readingLevel.label)")
                         .font(.appBody(size: 13))
                         .foregroundStyle(Theme.textTertiary)
                 }
@@ -96,6 +94,7 @@ struct SidebarView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
+            .accessibilityLabel("Settings")
         }
         .frame(maxHeight: .infinity)
         .glassEffect(.regular, in: .rect(cornerRadius: 24))
@@ -116,7 +115,9 @@ private struct ConversationRow: View {
                 Text(conversation.title)
                     .font(.appBody(size: 17))
                     .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 6) {
                     let m = mastery
                     Text(m.level.label)
