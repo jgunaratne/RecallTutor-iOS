@@ -11,6 +11,14 @@ enum Theme {
     static let textTertiary = Color(red: 87 / 255, green: 83 / 255, blue: 78 / 255)    // stone-600
     static let accent = Color(red: 234 / 255, green: 88 / 255, blue: 12 / 255)       // orange-600
     static let accentStrong = Color(red: 194 / 255, green: 65 / 255, blue: 12 / 255)  // orange-700
+    static let accentGradient = LinearGradient(
+        colors: [
+            Color(red: 249 / 255, green: 115 / 255, blue: 22 / 255), // orange-500
+            Color(red: 220 / 255, green: 38 / 255, blue: 38 / 255)   // red-600
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
     static let danger = Color(red: 153 / 255, green: 27 / 255, blue: 27 / 255)
     static let borderSubtle = Color(red: 28 / 255, green: 25 / 255, blue: 23 / 255).opacity(0.15)
     static let borderSoft = Color(red: 28 / 255, green: 25 / 255, blue: 23 / 255).opacity(0.08)

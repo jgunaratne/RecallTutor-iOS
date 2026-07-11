@@ -34,7 +34,7 @@ struct SidebarView: View {
                     Text("New lecture")
                         .font(.appBody(size: 17, weight: .medium))
                 }
-                .foregroundStyle(Theme.accentStrong)
+                .foregroundStyle(Theme.accentGradient)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 11)
                 .frame(maxWidth: .infinity, alignment: .leading)

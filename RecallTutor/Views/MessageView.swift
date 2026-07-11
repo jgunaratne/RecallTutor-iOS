@@ -45,11 +45,11 @@ struct LectureView: View {
                 if isStreaming && !isLastCard {
                     HStack(spacing: 5) {
                         Circle()
-                            .fill(Theme.accent)
+                            .fill(Theme.accentGradient)
                             .frame(width: 6, height: 6)
                         Text("Writing")
                             .font(.appBody(size: 13))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentGradient)
                     }
                 }
                 if cards.count > 1 {
@@ -148,7 +148,7 @@ struct LectureView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .frame(height: 36)
-                        .background(Theme.accentStrong, in: .capsule)
+                        .background(Theme.accentGradient, in: .capsule)
                     }
                     .buttonStyle(.plain)
                 } else {

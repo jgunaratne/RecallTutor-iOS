@@ -54,7 +54,7 @@ struct SignInSheet: View {
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(Theme.accentStrong, in: .rect(cornerRadius: 12))
+                    .background(Theme.accentGradient, in: .rect(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
                 .disabled(auth.isLoading)
