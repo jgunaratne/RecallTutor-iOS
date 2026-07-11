@@ -8,10 +8,13 @@ struct ChatView: View {
     @State private var input = ""
     @State private var sidebarOpen = false
     @State private var showSettings = false
+    @State private var subscriptions = SubscriptionManager.shared
+    @State private var auth = AuthManager.shared
     @FocusState private var inputFocused: Bool
 
     var body: some View {
-        ZStack {
+        @Bindable var model = model
+        return ZStack {
             Theme.page.ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -42,8 +45,22 @@ struct ChatView: View {
             SettingsView()
                 .environment(model)
         }
+        .sheet(isPresented: $model.showSignIn) {
+            SignInSheet()
+        }
+        .sheet(isPresented: $subscriptions.showPaywall) {
+            PaywallView(onOpenSettings: { showSettings = true })
+        }
         .onAppear {
-            if !model.hasAPIKey { showSettings = true }
+            let hasPersonalKey = model.availableProviders.contains(.anthropic)
+                || model.availableProviders.contains(.gemini)
+            if !model.hasAPIKey {
+                // No key and no Firebase config — Settings is the only path.
+                showSettings = true
+            } else if !hasPersonalKey, !auth.isSignedIn, !auth.hasSkippedSignIn {
+                // Built-in tier available but needs an account: offer sign-in.
+                model.showSignIn = true
+            }
         }
     }
 
@@ -88,6 +105,24 @@ struct ChatView: View {
                             .frame(width: 44, height: 44)
                     }
                     .accessibilityLabel("Close lecture")
+                } else {
+                    // Home screen: account avatar (placeholder silhouette when
+                    // signed out). Signed in → Settings (account section);
+                    // signed out → the sign-in sheet.
+                    Button {
+                        if auth.isSignedIn {
+                            showSettings = true
+                        } else {
+                            model.showSignIn = true
+                        }
+                    } label: {
+                        UserAvatarView(photoURL: auth.photoURL, size: 36)
+                            .glassEffect(.regular.interactive(), in: .circle)
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(auth.isSignedIn
+                                        ? "Account: \(auth.displayName ?? auth.email ?? "signed in")"
+                                        : "Sign in")
                 }
             }
         }

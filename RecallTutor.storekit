@@ -1,0 +1,63 @@
+{
+  "identifier" : "E1000001-0000-0000-0000-000000000001",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0000000000",
+    "_developerTeamID" : "HM32H656B6",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "E1000002-0000-0000-0000-000000000002",
+      "localizations" : [
+
+      ],
+      "name" : "RecallTutor",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "E1000003-0000-0000-0000-000000000003",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlimited built-in lectures and quizzes.",
+              "displayName" : "Recall Tutor Pro",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.gunaratne.recalltutor.promonthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Recall Tutor Pro",
+          "subscriptionGroupID" : "E1000002-0000-0000-0000-000000000002",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

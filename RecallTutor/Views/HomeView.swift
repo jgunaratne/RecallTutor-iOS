@@ -25,6 +25,11 @@ struct HomeView: View {
                 .padding(.bottom, 20)
             }
             .scrollDismissesKeyboard(.interactively)
+            // Tap anywhere outside the input card to unfocus and close the
+            // keyboard (buttons/chips still take precedence over this tap).
+            .onTapGesture {
+                inputFocused.wrappedValue = false
+            }
 
             // Input pinned to the bottom of the home screen.
             VStack(spacing: 8) {

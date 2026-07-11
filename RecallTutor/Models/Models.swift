@@ -140,6 +140,9 @@ enum ReadingLevel: String, Codable, CaseIterable, Identifiable {
 enum AIProvider: String, Codable, CaseIterable, Identifiable {
     case anthropic
     case gemini
+    /// Built-in Gemini via Firebase AI — no API key required. Account-bound
+    /// and metered (3 free lectures, then Recall Tutor Pro).
+    case firebase
 
     var id: String { rawValue }
 
@@ -147,6 +150,7 @@ enum AIProvider: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .anthropic: return "Claude"
         case .gemini: return "Gemini"
+        case .firebase: return "Built-in"
         }
     }
 }

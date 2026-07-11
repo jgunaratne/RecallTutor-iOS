@@ -45,7 +45,7 @@ enum Prompts {
     ```chart
     {"type": "bar", "title": "Chart title", "xLabel": "X axis", "yLabel": "Y axis", "data": [{"label": "A", "value": 30}, {"label": "B", "value": 55}]}
     ```
-    "type" is "bar", "line", or "pie". Use 3-8 data points with realistic values. For "line", order the points along the x-axis progression.
+    "type" is "bar", "line", or "pie". Use 3-8 data points with realistic values. For "line", order the points along the x-axis progression. Keep every "label" SHORT — 1-2 words, at most 12 characters (abbreviate if needed) — so axis labels stay readable on a phone screen.
 
     2. FLOW — for workflows, processes, lifecycles, sequences, or causal chains. A fenced block with language tag "flow" containing ONLY one JSON object:
     ```flow

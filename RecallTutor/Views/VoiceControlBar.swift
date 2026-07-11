@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// Compact voice-tutor controls — speaker mute/unmute (or connect), and an
-/// "Ask Question" mic pill while connected. Lives in the lecture card bottom
-/// navigation bar and teleports into the quiz header while the quiz is open.
+/// "Ask Question" mic pill while connected. Designed to sit inside a shared
+/// liquid-glass capsule (the lecture/quiz bottom navigation bars), so the
+/// buttons carry only tinted state fills rather than their own glass.
 struct VoiceControlBar: View {
     let tutor: VoiceTutorManager
 
@@ -44,7 +45,7 @@ struct VoiceControlBar: View {
             }
             .foregroundStyle(speakerTint)
             .frame(width: 44, height: 36)
-            .glassEffect(.regular.tint(speakerFill).interactive())
+            .background(speakerFill, in: .capsule)
             .background {
                 if tutor.isSpeaking && !tutor.isMuted {
                     Capsule()
@@ -52,7 +53,9 @@ struct VoiceControlBar: View {
                         .modifier(PulseEffect())
                 }
             }
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
         .disabled(tutor.status == .connecting)
         .accessibilityLabel(speakerAccessibilityLabel)
     }
@@ -99,21 +102,27 @@ struct VoiceControlBar: View {
         Button {
             tutor.toggleMic()
         } label: {
-            Image(systemName: tutor.isMicOpen ? "mic.fill" : "mic.slash")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(tutor.isMicOpen ? Color.red : Theme.textSecondary)
-                .frame(width: 44, height: 36)
-                .glassEffect(
-                    .regular.tint(tutor.isMicOpen ? Color.red.opacity(0.12) : .clear).interactive()
-                )
-                .overlay {
-                    if tutor.isMicOpen {
-                        Capsule()
-                            .stroke(Color.red.opacity(0.4), lineWidth: 1.5)
-                            .modifier(PulseEffect())
-                    }
+            HStack(spacing: 5) {
+                Image(systemName: tutor.isMicOpen ? "mic.fill" : "mic.slash")
+                    .font(.system(size: 17, weight: .medium))
+                Text("Ask")
+                    .font(.appBody(size: 15, weight: .medium))
+            }
+            .foregroundStyle(tutor.isMicOpen ? Color.red : Theme.textSecondary)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(tutor.isMicOpen ? Color.red.opacity(0.12) : .clear, in: .capsule)
+            .overlay {
+                if tutor.isMicOpen {
+                    Capsule()
+                        .stroke(Color.red.opacity(0.4), lineWidth: 1.5)
+                        .modifier(PulseEffect())
                 }
+            }
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tutor.isMicOpen ? "Stop asking" : "Ask a question")
     }
 }
 

@@ -2,3 +2,6 @@
 build/
 xcuserdata/
 *.xcuserstate
+
+# Firebase config and local StoreKit sandbox credentials stay local
+GoogleService-Info.plist
