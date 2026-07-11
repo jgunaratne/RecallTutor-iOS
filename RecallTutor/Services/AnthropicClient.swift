@@ -272,7 +272,7 @@ struct AnthropicClient {
         "properties": [
             "topics": [
                 "type": "array",
-                "description": "A list of 8 topics generated for the user.",
+                "description": "A list of 5 topics generated for the user.",
                 "items": [
                     "type": "object",
                     "properties": [

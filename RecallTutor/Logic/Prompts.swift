@@ -172,21 +172,24 @@ enum Prompts {
 
     static func topicGenerationSystemPrompt(category: String, level: ReadingLevel) -> String {
         """
-        You are the topic generation engine for Recall Tutor. Your job is to generate exactly 8 interesting, educational, and engaging study topics for the user.
-        
-        Category: \(category) (either "Education" or "Jobs & Careers")
+        You are the topic generation engine for Recall Tutor. Your job is to generate exactly 5 interesting, educational, and engaging study topics for the user.
+
+        Category: \(category)
         Reading/Education Level: \(level.rawValue) (elementary, middle, high, university)
-        
+
         CRITICAL FORMATTING:
-        - Output EXACTLY 8 topics matching the specified education level and category.
-        - For "Education", focus on academic subjects (math, science, history, programming, biology, engineering, etc.).
+        - Output EXACTLY 5 topics matching the specified education level and category.
+        - For "Science", focus on natural sciences, math, technology, and engineering (physics, biology, chemistry, astronomy, programming, etc.).
+        - For "Humanities", focus on history, philosophy, literature, art, music, languages, and religion.
+        - For "Social Science", focus on psychology, economics, sociology, political science, and geography.
+        - For "Business & Finance", focus on business, entrepreneurship, investing, personal finance, and markets.
         - For "Jobs & Careers", focus on career advice, job hunting, interviewing, work productivity, leadership, professional development, networking.
         - Ensure topics match the \(level.rawValue) reading level in vocabulary, complexity, and framing.
         """
     }
 
     static func topicGenerationUserPrompt(excluding: Set<String>) -> String {
-        var prompt = "Generate 8 fresh and interesting topics."
+        var prompt = "Generate 5 fresh and interesting topics."
         if !excluding.isEmpty {
             prompt += "\n\nCRITICAL — NO REPEAT TOPICS: The following prompts or topics are ALREADY shown. You MUST NOT repeat, rephrase, or return similar topics to these:\n"
             for item in Array(excluding).sorted().prefix(50) {

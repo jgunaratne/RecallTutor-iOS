@@ -19,19 +19,14 @@ struct HomeView: View {
                             .foregroundStyle(Theme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        sectionDivider("Education")
-                        topicGrid(
-                            model.visibleTopics,
-                            isLoadingMore: model.isLoadingMoreTopics,
-                            onLoadMore: { model.loadMoreTopics() }
-                        )
-
-                        sectionDivider("Jobs & Careers")
-                        topicGrid(
-                            model.visibleProTopics,
-                            isLoadingMore: model.isLoadingMoreProTopics,
-                            onLoadMore: { model.loadMoreProTopics() }
-                        )
+                        ForEach(TopicCategory.allCases, id: \.self) { category in
+                            sectionDivider(category.rawValue, icon: category.icon)
+                            topicGrid(
+                                model.visibleTopics[category] ?? [],
+                                isLoadingMore: model.loadingMoreCategories.contains(category),
+                                onLoadMore: { model.loadMoreTopics(for: category) }
+                            )
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -52,13 +47,17 @@ struct HomeView: View {
         }
     }
 
-    private func sectionDivider(_ label: String) -> some View {
+    private func sectionDivider(_ label: String, icon: String) -> some View {
         HStack(spacing: 12) {
             Rectangle().fill(Theme.borderSoft).frame(height: 1)
-            Text(label)
-                .font(.appBody(size: 13, weight: .medium))
-                .foregroundStyle(Theme.textTertiary)
-                .fixedSize()
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                Text(label)
+                    .font(.appBody(size: 13, weight: .medium))
+            }
+            .foregroundStyle(Theme.textTertiary)
+            .fixedSize()
             Rectangle().fill(Theme.borderSoft).frame(height: 1)
         }
     }
