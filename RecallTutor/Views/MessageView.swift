@@ -210,7 +210,6 @@ struct LectureView: View {
             VStack(spacing: 16) {
                 ProgressView()
                     .controlSize(.large)
-                    .scaleEffect(1.4)
                     .tint(Theme.accent)
                 Text("Preparing lecture notes…")
                     .font(.appBody(size: 17))
