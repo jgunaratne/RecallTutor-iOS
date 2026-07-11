@@ -28,6 +28,10 @@ final class VoiceTutorManager {
     private var session: GeminiLiveSession?
     private var recorder: LiveAudioRecorder?
     private var player: LiveAudioPlayer?
+    // When the mic was opened — playback that starts within a moment of this
+    // is leftover audio from the turn the student just barged in on, not a
+    // reply, and must not trigger the auto mic close.
+    private var micOpenedAt = Date.distantPast
 
     // Cards streamed to the model as grounding context vs. cards the tutor
     // has been asked to read aloud — separate sets, because every card
@@ -76,6 +80,16 @@ final class VoiceTutorManager {
         player.muted = isMuted
         player.onPlaybackStart = { [weak self] in
             guard let self else { return }
+            // The tutor started speaking — the student's turn is over, so
+            // close the mic (resetting the Ask button) rather than letting
+            // tutor speech re-enter it. A real reply can't start sooner than
+            // ~1s after mic open (the VAD needs 1s of silence to commit the
+            // turn), so anything earlier is in-flight audio from the barged-in
+            // turn and is ignored.
+            if self.isMicOpen, Date().timeIntervalSince(self.micOpenedAt) > 1.0 {
+                self.closeMic()
+                self.session?.sendAudioStreamEnd()
+            }
             // Don't flip isSpeaking when muted — the icon should stay muted.
             if !self.isMuted { self.isSpeaking = true }
         }
@@ -274,6 +288,7 @@ final class VoiceTutorManager {
                     self.recorder = recorder
                     self.errorMessage = nil
                     self.isMicOpen = true
+                    self.micOpenedAt = Date()
                     // Opening the mic is an explicit "my turn" — stop the
                     // tutor's speech so it isn't talking into the open mic,
                     // and duck any reply audio while the mic stays open.
