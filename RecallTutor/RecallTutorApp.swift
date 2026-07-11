@@ -5,6 +5,9 @@ import FirebaseCore
 @main
 struct RecallTutorApp: App {
     @State private var chatModel: ChatModel
+    @State private var hasCompletedOnboarding = UserDefaults.standard.bool(
+        forKey: "recalltutor_has_completed_onboarding"
+    )
 
     init() {
         Self.registerBundledFonts()
@@ -35,9 +38,13 @@ struct RecallTutorApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ChatView()
-                .environment(chatModel)
-                .preferredColorScheme(.light)
+            if !hasCompletedOnboarding {
+                OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
+            } else {
+                ChatView()
+                    .environment(chatModel)
+                    .preferredColorScheme(.light)
+            }
         }
     }
 }

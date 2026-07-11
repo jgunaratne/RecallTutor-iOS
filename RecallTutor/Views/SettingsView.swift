@@ -116,15 +116,29 @@ struct SettingsView: View {
     private var accountSection: some View {
         Section {
             if auth.isSignedIn {
-                LabeledContent("Signed in as", value: auth.email ?? auth.displayName ?? "Google account")
+                LabeledContent("Signed in as", value: auth.email ?? auth.displayName ?? "Account")
                 Button("Sign Out", role: .destructive) {
                     auth.signOut()
                 }
             } else {
                 Button {
+                    auth.signInWithApple()
+                } label: {
+                    HStack {
+                        Image(systemName: "apple.logo")
+                        Text("Sign in with Apple")
+                        if auth.isLoading {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(auth.isLoading)
+                Button {
                     auth.signInWithGoogle()
                 } label: {
                     HStack {
+                        Image(systemName: "g.circle.fill")
                         Text("Sign in with Google")
                         if auth.isLoading {
                             Spacer()
@@ -173,6 +187,9 @@ struct SettingsView: View {
             Toggle("Pro Override (dev)", isOn: $subscriptions.manualProOverrideEnabled)
             Button("Reset Free Lecture Count (dev)") {
                 subscriptions.resetFreeUsage()
+            }
+            Button("Replay Onboarding (dev)") {
+                UserDefaults.standard.set(false, forKey: "recalltutor_has_completed_onboarding")
             }
             #endif
         } header: {
