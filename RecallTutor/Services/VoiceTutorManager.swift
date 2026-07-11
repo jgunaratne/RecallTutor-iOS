@@ -4,6 +4,13 @@ import Observation
 /// Orchestrates one Gemini Live voice-tutor session for the current lecture —
 /// the iOS counterpart of components/GeminiLiveOverlay.tsx. Owns the session,
 /// mic recorder, and player; feeds cards and quiz events into the model.
+///
+/// Supports two backends (mirroring podchat's VoiceModeViewModel):
+/// - **Raw WebSocket** (`GeminiLiveSession`): when the user has a Gemini API
+///   key, connects directly to `gemini-3.1-flash-live-preview`.
+/// - **Firebase AI SDK** (`FirebaseLiveBackend`): when no key is configured,
+///   uses Firebase AI's native Live API with `gemini-2.5-flash-native-audio`
+///   — no API key required, Firebase handles auth via GoogleService-Info.plist.
 @Observable
 @MainActor
 final class VoiceTutorManager {
@@ -27,7 +34,24 @@ final class VoiceTutorManager {
         }
     }
 
+    // MARK: - Backend selection
+
+    /// Which backend is currently active.
+    enum LiveBackend {
+        case websocket  // Raw WebSocket → gemini-3.1-flash-live-preview
+        case firebase   // Firebase AI SDK → gemini-2.5-flash-native-audio
+    }
+
+    /// The currently active backend (nil when disconnected).
+    private(set) var activeBackend: LiveBackend?
+
+    /// Whether the user has a Gemini API key configured.
+    private var hasAPIKey: Bool { Keychain.loadKey(.gemini) != nil }
+
+    // MARK: - Services
+
     private var session: GeminiLiveSession?
+    private let fbBackend = FirebaseLiveBackend()
     private var recorder: LiveAudioRecorder?
     private var player: LiveAudioPlayer?
     // When the mic was opened — playback that starts within a moment of this
@@ -74,6 +98,7 @@ final class VoiceTutorManager {
         // whose callbacks still write into this manager.
         session?.disconnect()
         session = nil
+        fbBackend.disconnect()
         closeMic()
         player?.stop()
 
@@ -83,17 +108,12 @@ final class VoiceTutorManager {
         player.muted = isMuted
         player.onPlaybackStart = { [weak self] in
             guard let self else { return }
-            // The tutor started speaking — the student's turn is over, so
-            // close the mic (resetting the Ask button) rather than letting
-            // tutor speech re-enter it. A real reply can't start sooner than
-            // ~1s after mic open (the VAD needs 1s of silence to commit the
-            // turn), so anything earlier is in-flight audio from the barged-in
-            // turn and is ignored.
             if self.isMicOpen, Date().timeIntervalSince(self.micOpenedAt) > 1.0 {
                 self.closeMic()
-                self.session?.sendAudioStreamEnd()
+                if self.activeBackend == .websocket {
+                    self.session?.sendAudioStreamEnd()
+                }
             }
-            // Don't flip isSpeaking when muted — the icon should stay muted.
             if !self.isMuted { self.isSpeaking = true }
         }
         player.onPlaybackEnd = { [weak self] in
@@ -101,6 +121,30 @@ final class VoiceTutorManager {
         }
         self.player = player
 
+        let systemInstr = LiveTutorPrompts.buildSystemInstruction(topic: topic, level: readingLevel)
+
+        if hasAPIKey {
+            // Use raw WebSocket → gemini-3.1-flash-live-preview (best quality).
+            activeBackend = .websocket
+            connectWebSocket(systemInstruction: systemInstr)
+        } else {
+            // No API key → use Firebase AI SDK tier.
+            // Requires sign-in (Firebase is account-bound).
+            guard AuthManager.shared.isSignedIn else {
+                errorMessage = "Sign in to use the voice tutor, or add a Gemini API key in Settings."
+                return
+            }
+            guard FirebaseAIClient.isAvailable else {
+                errorMessage = "Firebase isn't set up. Add GoogleService-Info.plist (see FIREBASE.md)."
+                return
+            }
+
+            activeBackend = .firebase
+            connectFirebase(systemInstruction: systemInstr)
+        }
+    }
+
+    private func connectWebSocket(systemInstruction: String) {
         let session = GeminiLiveSession(callbacks: GeminiLiveCallbacks(
             onStatusChange: { [weak self] status in
                 guard let self else { return }
@@ -108,8 +152,6 @@ final class VoiceTutorManager {
                 if status == .error { self.isSpeaking = false }
                 if status != .connected {
                     if self.isMicOpen {
-                        // The connection dropped mid-question; the half-sent
-                        // turn is lost, so tell the student to re-ask.
                         self.errorMessage = "Connection dropped — ask again"
                     }
                     self.closeMic()
@@ -122,7 +164,6 @@ final class VoiceTutorManager {
             onTextChunk: nil,
             onTurnComplete: nil,
             onInterrupted: { [weak self] in
-                // Barge-in: the student spoke over the tutor.
                 self?.player?.flush()
             },
             onError: { [weak self] message in
@@ -140,14 +181,60 @@ final class VoiceTutorManager {
         sentQuizResult = nil
 
         session.connect(
-            systemInstruction: LiveTutorPrompts.buildSystemInstruction(topic: topic, level: readingLevel),
+            systemInstruction: systemInstruction,
             voice: sessionVoice
         )
+    }
+
+    private func connectFirebase(systemInstruction: String) {
+        fbBackend.voice = sessionVoice
+        fbBackend.systemInstruction = systemInstruction
+
+        fbBackend.onStatusChange = { [weak self] status in
+            guard let self else { return }
+            self.status = status
+            if status == .error { self.isSpeaking = false }
+            if status != .connected {
+                if self.isMicOpen {
+                    self.errorMessage = "Connection dropped — ask again"
+                }
+                self.closeMic()
+            }
+        }
+        fbBackend.onAudioChunk = { [weak self] data in
+            guard let self, !self.suppressAudio else { return }
+            self.player?.playChunkData(data)
+        }
+        fbBackend.onAudioTurnStarted = { [weak self] in
+            guard let self else { return }
+            if self.isMicOpen, Date().timeIntervalSince(self.micOpenedAt) > 1.0 {
+                self.closeMic()
+            }
+            if !self.isMuted { self.isSpeaking = true }
+        }
+        fbBackend.onInterrupted = { [weak self] in
+            self?.player?.flush()
+        }
+        fbBackend.onError = { [weak self] message in
+            self?.errorMessage = message
+        }
+
+        hasKickedOff = false
+        sentCards.removeAll()
+        readCards.removeAll()
+        lastSpokenCard = nil
+        sentQuiz = nil
+        sentAnswer = nil
+        sentQuizResult = nil
+
+        fbBackend.connect()
     }
 
     func disconnect() {
         session?.disconnect()
         session = nil
+        fbBackend.disconnect()
+        activeBackend = nil
         closeMic()
         player?.stop()
         player = nil
@@ -164,6 +251,35 @@ final class VoiceTutorManager {
         LiveAudioSession.deactivate()
     }
 
+    // MARK: - Unified send helpers
+
+    /// Send context (no model response) to whichever backend is active.
+    private func backendSendContext(_ text: String) {
+        switch activeBackend {
+        case .websocket: session?.sendContext(text)
+        case .firebase:  fbBackend.sendContext(text)
+        case nil: break
+        }
+    }
+
+    /// Send text that triggers a model response to whichever backend is active.
+    private func backendSendText(_ text: String) {
+        switch activeBackend {
+        case .websocket: session?.sendText(text)
+        case .firebase:  fbBackend.sendText(text)
+        case nil: break
+        }
+    }
+
+    /// Send audio to whichever backend is active.
+    private func backendSendAudio(_ base64: String) {
+        switch activeBackend {
+        case .websocket: session?.sendAudio(base64)
+        case .firebase:  fbBackend.sendAudio(base64Data: base64)
+        case nil: break
+        }
+    }
+
     // MARK: - Card feed
 
     /// Called whenever the visible card or the card list changes. Seeds new
@@ -171,12 +287,12 @@ final class VoiceTutorManager {
     /// seeding once the conversation starts), and reads the visible card
     /// aloud on the first show and on each flip.
     func updateCards(all: [String], current: String?) {
-        guard let session, status == .connected else { return }
+        guard status == .connected else { return }
 
         if !hasKickedOff {
             for (index, card) in all.enumerated() where !sentCards.contains(card) {
                 sentCards.insert(card)
-                session.sendContext("[CARD \(index + 1) CONTENT]\n\(card)")
+                backendSendContext("[CARD \(index + 1) CONTENT]\n\(card)")
             }
         }
 
@@ -195,11 +311,11 @@ final class VoiceTutorManager {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let self, self.status == .connected else { return }
                 if resuming {
-                    self.session?.sendText(
+                    self.backendSendText(
                         "[RECONNECTED MID-LECTURE — CURRENT CARD]\n\(current)\n\nThe voice connection dropped and was just restored partway through this lecture. Pick up naturally from this card — do NOT re-introduce the topic, greet me, or start over. Briefly continue explaining this card's content."
                     )
                 } else {
-                    self.session?.sendText(
+                    self.backendSendText(
                         "[FIRST CARD]\n\(current)\n\nBegin now. Start by giving a brief, enthusiastic introduction to the topic, then explain the content of this first card. Keep it conversational and engaging. Do NOT greet me or say hello."
                     )
                 }
@@ -209,11 +325,11 @@ final class VoiceTutorManager {
             // immediately instead of queueing behind stale speech.
             player?.flush()
             if isRevisit {
-                session.sendText(
+                backendSendText(
                     "[CURRENT CARD — the student flipped back to this card]\n\(current)\n\nThe student returned to this card to review it. Briefly recap its key point in a fresh way — one or two sentences, don't repeat your earlier explanation word for word."
                 )
             } else {
-                session.sendText(
+                backendSendText(
                     "[CURRENT CARD — the student just flipped to this card]\n\(current)\n\nThe student just moved to this card. Explain its content naturally, building on what you've already covered. Keep it brief and conversational."
                 )
             }
@@ -234,32 +350,32 @@ final class VoiceTutorManager {
     }
 
     func quizQuestionShown(_ context: String) {
-        guard let session, status == .connected, sentQuiz != context else { return }
+        guard status == .connected, sentQuiz != context else { return }
         sentQuiz = context
         sentAnswer = nil
         // The quiz has actually started — lift the intro suppression and drop
         // any stale buffered speech so the tutor comes back on the question.
         suppressAudio = false
         player?.flush()
-        session.sendText(
+        backendSendText(
             "[QUIZ QUESTION]\n\(context)\n\nA quiz question has appeared! Read it out loud engagingly and let the student think about the answer. Do not reveal the correct answer."
         )
     }
 
     func answerGiven(_ context: String) {
-        guard let session, status == .connected, sentAnswer != context else { return }
+        guard status == .connected, sentAnswer != context else { return }
         sentAnswer = context
         player?.flush()
-        session.sendText(
+        backendSendText(
             "\(context)\n\nReact to how the student answered. Be concise — one or two sentences. Be encouraging if correct, gently corrective if wrong. Then stop and wait for the next question."
         )
     }
 
     func quizFinished(_ context: String) {
-        guard let session, status == .connected, sentQuizResult != context else { return }
+        guard status == .connected, sentQuizResult != context else { return }
         sentQuizResult = context
         player?.flush()
-        session.sendText(
+        backendSendText(
             "\(context)\n\nThe quiz has ended and the student is looking at their scorecard. Give a short closing remark on their overall performance — celebrate a strong score, or be warm and encouraging about trying again if they struggled. Two sentences at most, then stop."
         )
     }
@@ -272,7 +388,9 @@ final class VoiceTutorManager {
             closeMic()
             // Commit the user's turn — without this, VAD waits forever for
             // trailing silence that never arrives once the stream stops.
-            session?.sendAudioStreamEnd()
+            if activeBackend == .websocket {
+                session?.sendAudioStreamEnd()
+            }
         } else {
             Task { [weak self] in
                 guard await LiveAudioRecorder.requestPermission() else {
@@ -282,10 +400,9 @@ final class VoiceTutorManager {
                 guard let self, self.status == .connected else { return }
                 do {
                     let recorder = LiveAudioRecorder()
-                    let session = self.session
-                    try recorder.start { base64 in
+                    try recorder.start { [weak self] base64 in
                         Task { @MainActor in
-                            session?.sendAudio(base64)
+                            self?.backendSendAudio(base64)
                         }
                     }
                     self.recorder = recorder
