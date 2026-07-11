@@ -301,6 +301,11 @@ final class ChatModel {
             let tutor = VoiceTutorManager(topic: topic, readingLevel: readingLevel)
             voiceTutor = tutor
             tutor.connect()
+        } else if voiceTutor?.status == .error {
+            // A failed connect (network blip, quota) would otherwise leave the
+            // tutor dead for the rest of the lecture — retry on the next card
+            // event. Card flips are user-paced, so this can't storm the API.
+            voiceTutor?.connect()
         }
         voiceTutor?.updateCards(all: all, current: current)
     }
