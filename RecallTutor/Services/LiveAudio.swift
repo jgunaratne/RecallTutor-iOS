@@ -30,6 +30,12 @@ final class LiveAudioRecorder {
 
     func start(onChunk: @escaping (String) -> Void) throws {
         let input = engine.inputNode
+        // Insert Apple's echo canceller. The .voiceChat session mode alone
+        // does NOT enable AEC for a plain input tap — without this the
+        // tutor's own speaker audio re-enters the mic and the server VAD
+        // barge-ins against it, cutting the tutor off mid-sentence. Failure
+        // is non-fatal: degrade to the raw mic rather than blocking it.
+        try? input.setVoiceProcessingEnabled(true)
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0 else {
             throw NSError(domain: "LiveAudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone unavailable"])
