@@ -18,5 +18,13 @@
 			</array>
 		</dict>
 	</array>
+
+	<!-- Export compliance: the app only uses standard HTTPS/TLS network
+	     calls and OS-provided Keychain/CryptoKit APIs (a SHA-256 hash for
+	     the Sign in with Apple nonce) — no proprietary encryption. This
+	     answers the App Store Connect "does your app use non-exempt
+	     encryption" prompt so it isn't asked on every build upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

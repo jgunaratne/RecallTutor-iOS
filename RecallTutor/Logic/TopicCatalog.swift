@@ -6,6 +6,7 @@ enum TopicCategory: String, CaseIterable {
     case humanities = "Humanities"
     case socialScience = "Social Science"
     case business = "Business & Finance"
+    case technology = "Technology"
     case careers = "Jobs & Careers"
 
     /// SF Symbol shown next to the section title on the home screen.
@@ -15,6 +16,7 @@ enum TopicCategory: String, CaseIterable {
         case .humanities: "books.vertical"
         case .socialScience: "person.2"
         case .business: "chart.line.uptrend.xyaxis"
+        case .technology: "cpu"
         case .careers: "briefcase"
         }
     }
@@ -291,6 +293,60 @@ enum TopicCatalog {
         Topic(label: "Behavioral finance", prompt: "How do investor biases create bubbles and market anomalies?"),
     ]
 
+    // MARK: - Technology
+
+    private static let elementaryTechnology: [Topic] = [
+        Topic(label: "Computer brains", prompt: "How does a computer know what to do?"),
+        Topic(label: "Phone calls", prompt: "How do phones let us talk to people far away?"),
+        Topic(label: "Robot helpers", prompt: "How do robots know what to do?"),
+        Topic(label: "Internet magic", prompt: "How does the internet let us see faraway things?"),
+        Topic(label: "Video game fun", prompt: "How do video games work?"),
+        Topic(label: "Camera clicks", prompt: "How does a camera take a picture?"),
+        Topic(label: "Remote control", prompt: "How does a remote control the TV without wires?"),
+        Topic(label: "Typing letters", prompt: "How does typing on a keyboard put words on the screen?"),
+        Topic(label: "Charging up", prompt: "How does a battery charge a phone?"),
+        Topic(label: "Talking assistants", prompt: "How does a smart speaker understand what you say?"),
+    ]
+
+    private static let middleSchoolTechnology: [Topic] = [
+        Topic(label: "How the internet works", prompt: "How does information travel across the internet to reach my screen?"),
+        Topic(label: "What is coding?", prompt: "What is coding and how do people give instructions to computers?"),
+        Topic(label: "How search engines work", prompt: "How does a search engine find the right website out of billions?"),
+        Topic(label: "Smartphone sensors", prompt: "How do smartphones know which way they're facing or how fast they're moving?"),
+        Topic(label: "How Wi-Fi works", prompt: "How does Wi-Fi send data through the air without wires?"),
+        Topic(label: "Video game design", prompt: "How do game designers make characters move and react on screen?"),
+        Topic(label: "How passwords stay safe", prompt: "How do websites keep your password safe from hackers?"),
+        Topic(label: "3D printing", prompt: "How does a 3D printer turn a digital design into a real object?"),
+        Topic(label: "How GPS works", prompt: "How does GPS figure out exactly where you are?"),
+        Topic(label: "Social media algorithms", prompt: "How do apps decide what to show you in your feed?"),
+    ]
+
+    private static let highSchoolTechnology: [Topic] = [
+        Topic(label: "How computers store data", prompt: "How do computers represent everything as 1s and 0s?"),
+        Topic(label: "What is machine learning?", prompt: "What is machine learning and how is it different from regular programming?"),
+        Topic(label: "How the cloud works", prompt: "What does it actually mean when data is stored \"in the cloud\"?"),
+        Topic(label: "Encryption basics", prompt: "How does encryption scramble data so only the right person can read it?"),
+        Topic(label: "How processors work", prompt: "What does a CPU actually do inside a computer?"),
+        Topic(label: "Open source software", prompt: "What is open source software and why do companies give code away for free?"),
+        Topic(label: "How apps are built", prompt: "What's the difference between how a website and a mobile app are built?"),
+        Topic(label: "Net neutrality", prompt: "What is net neutrality and why is it controversial?"),
+        Topic(label: "How chatbots work", prompt: "How do AI chatbots generate responses that sound human?"),
+        Topic(label: "Cybersecurity basics", prompt: "What are the most common ways hackers break into systems?"),
+    ]
+
+    private static let universityTechnology: [Topic] = [
+        Topic(label: "Transformer architectures", prompt: "How do transformer architectures process sequences differently from RNNs?"),
+        Topic(label: "Distributed systems", prompt: "How do distributed systems maintain consistency across multiple machines?"),
+        Topic(label: "How compilers optimize code", prompt: "What techniques do compilers use to optimize code without changing its behavior?"),
+        Topic(label: "Public-key infrastructure", prompt: "How does public-key infrastructure establish trust across the internet?"),
+        Topic(label: "Database indexing internals", prompt: "How do B-trees and hash indexes trade off lookup speed and range queries?"),
+        Topic(label: "How GPUs accelerate computing", prompt: "Why are GPUs so much faster than CPUs for certain workloads?"),
+        Topic(label: "Consensus algorithms", prompt: "How do algorithms like Paxos and Raft achieve agreement despite failures?"),
+        Topic(label: "OS scheduling", prompt: "How does an operating system scheduler decide which process runs next?"),
+        Topic(label: "Training large language models", prompt: "What happens during pretraining and fine-tuning of a large language model?"),
+        Topic(label: "Zero-knowledge proofs", prompt: "How can you prove you know something without revealing what it is?"),
+    ]
+
     // MARK: - Jobs & Careers (level-independent)
 
     private static let careersTopics: [Topic] = [
@@ -322,24 +378,28 @@ enum TopicCatalog {
             .humanities: elementaryHumanities,
             .socialScience: elementarySocialScience,
             .business: elementaryBusiness,
+            .technology: elementaryTechnology,
         ],
         .middle: [
             .science: middleSchoolScience,
             .humanities: middleSchoolHumanities,
             .socialScience: middleSchoolSocialScience,
             .business: middleSchoolBusiness,
+            .technology: middleSchoolTechnology,
         ],
         .high: [
             .science: highSchoolScience,
             .humanities: highSchoolHumanities,
             .socialScience: highSchoolSocialScience,
             .business: highSchoolBusiness,
+            .technology: highSchoolTechnology,
         ],
         .university: [
             .science: universityScience,
             .humanities: universityHumanities,
             .socialScience: universitySocialScience,
             .business: universityBusiness,
+            .technology: universityTechnology,
         ],
     ]
 
