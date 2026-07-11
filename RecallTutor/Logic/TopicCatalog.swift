@@ -1,9 +1,33 @@
 import Foundation
 
-// Topic starter catalog — port of lib/topics.ts.
+/// Home screen topic sections, in display order.
+enum TopicCategory: String, CaseIterable {
+    case science = "Science"
+    case humanities = "Humanities"
+    case socialScience = "Social Science"
+    case business = "Business & Finance"
+    case careers = "Jobs & Careers"
+
+    /// SF Symbol shown next to the section title on the home screen.
+    var icon: String {
+        switch self {
+        case .science: "atom"
+        case .humanities: "books.vertical"
+        case .socialScience: "person.2"
+        case .business: "chart.line.uptrend.xyaxis"
+        case .careers: "briefcase"
+        }
+    }
+}
+
+// Topic starter catalog — port of lib/topics.ts, split into per-section pools.
+// Science/Humanities/Social Science vary by reading level; Jobs & Careers is
+// level-independent.
 enum TopicCatalog {
 
-    private static let elementaryTopics: [Topic] = [
+    // MARK: - Science
+
+    private static let elementaryScience: [Topic] = [
         Topic(label: "Sky colors", prompt: "Why is the sky blue?"),
         Topic(label: "Fish secrets", prompt: "How do fish breathe underwater?"),
         Topic(label: "Leaf magic", prompt: "Why do leaves change color?"),
@@ -26,7 +50,7 @@ enum TopicCatalog {
         Topic(label: "Dive deep", prompt: "How do submarines go underwater?"),
     ]
 
-    private static let middleSchoolTopics: [Topic] = [
+    private static let middleSchoolScience: [Topic] = [
         Topic(label: "How muscles work", prompt: "How do muscles make your body move?"),
         Topic(label: "Why the sky is blue", prompt: "Why does the sky look blue during the day?"),
         Topic(label: "Fractions made easy", prompt: "Explain fractions using pizza slices and real-life examples"),
@@ -49,12 +73,11 @@ enum TopicCatalog {
         Topic(label: "Sound and vibrations", prompt: "How does sound travel from a guitar string to your ear?"),
     ]
 
-    private static let highSchoolTopics: [Topic] = [
+    private static let highSchoolScience: [Topic] = [
         Topic(label: "Grasp statistics", prompt: "Explain confidence intervals in simple terms"),
         Topic(label: "Picture the math", prompt: "What are vectors in geometry and how do they work?"),
         Topic(label: "Natural selection", prompt: "How does natural selection drive evolution over time?"),
         Topic(label: "Chemical bonding", prompt: "What is the difference between ionic and covalent bonds?"),
-        Topic(label: "Supply and demand", prompt: "How do supply and demand curves determine market prices?"),
         Topic(label: "How vaccines work", prompt: "How does a vaccine train your immune system?"),
         Topic(label: "The cell cycle", prompt: "Walk me through the stages of mitosis and why cells divide"),
         Topic(label: "Electricity basics", prompt: "What are voltage, current, and resistance and how do they relate?"),
@@ -63,25 +86,21 @@ enum TopicCatalog {
         Topic(label: "How lenses work", prompt: "How do convex and concave lenses bend light differently?"),
         Topic(label: "Atomic structure", prompt: "Explain the structure of an atom and how electrons are arranged"),
         Topic(label: "Plate tectonics", prompt: "How do tectonic plates move and what effects does this have?"),
-        Topic(label: "The French Revolution", prompt: "What caused the French Revolution and what were its major phases?"),
         Topic(label: "Photosynthesis deep dive", prompt: "Walk me through the light and dark reactions of photosynthesis"),
         Topic(label: "Quadratic equations", prompt: "Why does the quadratic formula work and when do you use it?"),
         Topic(label: "Digestive system", prompt: "How does food get broken down and absorbed in the digestive system?"),
         Topic(label: "How encryption works", prompt: "How does encryption keep data safe when you browse the web?"),
         Topic(label: "Newton's three laws", prompt: "Explain Newton's three laws of motion with everyday examples"),
-        Topic(label: "The Cold War", prompt: "What were the main causes and turning points of the Cold War?"),
     ]
 
-    private static let universityTopics: [Topic] = [
+    private static let universityScience: [Topic] = [
         Topic(label: "B-Tree indexing", prompt: "Why do databases use B-Trees for indexing and how do they maintain balance?"),
         Topic(label: "Fourier transforms", prompt: "What is the intuition behind Fourier transforms and where are they used?"),
-        Topic(label: "Game theory equilibria", prompt: "Explain Nash equilibrium and its limitations in real-world scenarios"),
         Topic(label: "CRISPR mechanics", prompt: "How does the CRISPR-Cas9 system edit genes at a molecular level?"),
         Topic(label: "Consensus protocols", prompt: "How do distributed consensus algorithms like Raft achieve fault tolerance?"),
         Topic(label: "Quantum entanglement", prompt: "What is quantum entanglement and why did Einstein call it spooky action at a distance?"),
         Topic(label: "P vs NP", prompt: "What is the P vs NP problem and why does it matter for computer science?"),
         Topic(label: "General relativity", prompt: "How does general relativity describe gravity as spacetime curvature?"),
-        Topic(label: "Market microstructure", prompt: "How do order books and market makers affect price discovery?"),
         Topic(label: "Compiler design", prompt: "How does a compiler transform source code through lexing, parsing, and code generation?"),
         Topic(label: "Bayes' theorem", prompt: "Explain Bayesian inference and how prior beliefs update with new evidence"),
         Topic(label: "Neural backpropagation", prompt: "How does backpropagation compute gradients in a neural network?"),
@@ -92,10 +111,189 @@ enum TopicCatalog {
         Topic(label: "Public key crypto", prompt: "How does RSA public-key cryptography work and why is it hard to break?"),
         Topic(label: "Lambda calculus", prompt: "What is the lambda calculus and how does it relate to functional programming?"),
         Topic(label: "Type systems", prompt: "How do type systems prevent errors and what are dependent types?"),
-        Topic(label: "Mechanism design", prompt: "What is mechanism design and how does it relate to auction theory?"),
     ]
 
-    private static let professionalTopics: [Topic] = [
+    // MARK: - Humanities
+
+    private static let elementaryHumanities: [Topic] = [
+        Topic(label: "Castle life", prompt: "What was it like to live in a castle?"),
+        Topic(label: "Pyramid builders", prompt: "How did people build the pyramids?"),
+        Topic(label: "Cave paintings", prompt: "Why did people long ago paint on cave walls?"),
+        Topic(label: "First writing", prompt: "How did people invent writing?"),
+        Topic(label: "Fairy tales", prompt: "Why do we tell fairy tales?"),
+        Topic(label: "Music makers", prompt: "Why do people all over the world make music?"),
+        Topic(label: "Museum treasures", prompt: "What do museums keep and why?"),
+        Topic(label: "Knights and armor", prompt: "What did knights really do?"),
+        Topic(label: "Many languages", prompt: "Why do people speak different languages?"),
+        Topic(label: "Mummy mysteries", prompt: "Why did ancient Egyptians make mummies?"),
+        Topic(label: "Dragon stories", prompt: "Why do so many stories have dragons?"),
+        Topic(label: "Color mixing", prompt: "How do artists mix colors to make new ones?"),
+    ]
+
+    private static let middleSchoolHumanities: [Topic] = [
+        Topic(label: "Ancient Rome", prompt: "What was daily life like in ancient Rome?"),
+        Topic(label: "Greek myths", prompt: "Who were the Greek gods and why did people believe in them?"),
+        Topic(label: "The Silk Road", prompt: "What was the Silk Road and what traveled along it?"),
+        Topic(label: "Hieroglyphics", prompt: "How did ancient Egyptians write with hieroglyphics and how did we decode them?"),
+        Topic(label: "Vikings at sea", prompt: "Who were the Vikings and how far did they really travel?"),
+        Topic(label: "The printing press", prompt: "How did the printing press change the world?"),
+        Topic(label: "The Renaissance", prompt: "What was the Renaissance and why did art explode in Italy?"),
+        Topic(label: "Great Wall of China", prompt: "Why was the Great Wall of China built?"),
+        Topic(label: "Language change", prompt: "Why do languages change over time and where did English come from?"),
+        Topic(label: "Shakespeare's world", prompt: "Who was Shakespeare and why are his plays still famous?"),
+        Topic(label: "Medieval knights", prompt: "What was it really like to be a medieval knight?"),
+        Topic(label: "World religions", prompt: "What are the world's major religions and how did they begin?"),
+    ]
+
+    private static let highSchoolHumanities: [Topic] = [
+        Topic(label: "The French Revolution", prompt: "What caused the French Revolution and what were its major phases?"),
+        Topic(label: "The Cold War", prompt: "What were the main causes and turning points of the Cold War?"),
+        Topic(label: "Renaissance art", prompt: "How did Renaissance artists change painting forever?"),
+        Topic(label: "Socrates and Plato", prompt: "What were the core ideas of Socrates and Plato and why do they still matter?"),
+        Topic(label: "World War I causes", prompt: "How did World War I start and why did it become so massive?"),
+        Topic(label: "Fall of Rome", prompt: "Why did the Roman Empire fall?"),
+        Topic(label: "Shakespeare's tragedies", prompt: "What makes Shakespeare's tragedies like Hamlet and Macbeth so powerful?"),
+        Topic(label: "The Enlightenment", prompt: "What was the Enlightenment and how did it shape modern ideas?"),
+        Topic(label: "Literary devices", prompt: "How do metaphor, irony, and symbolism work in literature?"),
+        Topic(label: "History of jazz", prompt: "How did jazz emerge and influence American culture?"),
+        Topic(label: "Mythology's echoes", prompt: "How do ancient myths shape modern movies and books?"),
+        Topic(label: "Civil Rights Movement", prompt: "What were the key events and strategies of the Civil Rights Movement?"),
+    ]
+
+    private static let universityHumanities: [Topic] = [
+        Topic(label: "The hard problem", prompt: "What is the hard problem of consciousness and why does it resist explanation?"),
+        Topic(label: "Kant's ethics", prompt: "What is Kant's categorical imperative and how does it differ from utilitarianism?"),
+        Topic(label: "Existentialism", prompt: "What did Sartre and Camus mean by existence preceding essence and the absurd?"),
+        Topic(label: "Wittgenstein's games", prompt: "What are Wittgenstein's language games and why did he change his mind about language?"),
+        Topic(label: "Postmodernism", prompt: "What is postmodernism and what was it reacting against?"),
+        Topic(label: "Historiography", prompt: "How do historians decide what actually happened — and can history be objective?"),
+        Topic(label: "Semiotics", prompt: "How do signs and symbols create meaning according to semiotics?"),
+        Topic(label: "The epic tradition", prompt: "How were oral epics like the Iliad composed and transmitted?"),
+        Topic(label: "Stoicism", prompt: "What did the Stoics actually teach and what do modern versions get wrong?"),
+        Topic(label: "Aesthetics", prompt: "What makes something beautiful — is beauty objective or subjective?"),
+        Topic(label: "Free will debates", prompt: "What are the compatibilist and libertarian positions on free will?"),
+        Topic(label: "Critical theory", prompt: "What is the Frankfurt School and what is critical theory?"),
+    ]
+
+    // MARK: - Social Science
+
+    private static let elementarySocialScience: [Topic] = [
+        Topic(label: "Money matters", prompt: "Why do we use money instead of trading things?"),
+        Topic(label: "School days", prompt: "Why do kids go to school?"),
+        Topic(label: "City life", prompt: "Why do people live in cities?"),
+        Topic(label: "Rules everywhere", prompt: "Why do we have rules and laws?"),
+        Topic(label: "Map magic", prompt: "How do maps help us find places?"),
+        Topic(label: "Hello world", prompt: "How do people say hello in different countries?"),
+        Topic(label: "Price tags", prompt: "How do stores decide what things cost?"),
+        Topic(label: "Town leaders", prompt: "What does a mayor do?"),
+        Topic(label: "Sharing is caring", prompt: "Why does sharing make us feel good?"),
+        Topic(label: "Holiday time", prompt: "Why do different families celebrate different holidays?"),
+        Topic(label: "Big votes", prompt: "What happens when grown-ups vote?"),
+        Topic(label: "Helping hands", prompt: "Why do people work at different jobs?"),
+    ]
+
+    private static let middleSchoolSocialScience: [Topic] = [
+        Topic(label: "How money works", prompt: "Where does money get its value and how do banks work?"),
+        Topic(label: "Elections explained", prompt: "How do elections work and why does every vote count?"),
+        Topic(label: "What is government?", prompt: "What does a government do and why do we need one?"),
+        Topic(label: "Advertising tricks", prompt: "How do advertisements convince people to buy things?"),
+        Topic(label: "Why countries trade", prompt: "Why do countries buy and sell things from each other?"),
+        Topic(label: "Culture and customs", prompt: "What is culture and why is it different around the world?"),
+        Topic(label: "How cities grow", prompt: "Why do some cities grow huge while others stay small?"),
+        Topic(label: "Peer pressure", prompt: "What is peer pressure and how does it change how people act?"),
+        Topic(label: "Supply and demand", prompt: "Why do prices go up when everyone wants the same thing?"),
+        Topic(label: "Laws and fairness", prompt: "How are laws made and what happens when they're unfair?"),
+        Topic(label: "News and media", prompt: "How does news get made and how can you tell if it's trustworthy?"),
+        Topic(label: "Habits and choices", prompt: "Why do we form habits and how can we change them?"),
+    ]
+
+    private static let highSchoolSocialScience: [Topic] = [
+        Topic(label: "Supply and demand", prompt: "How do supply and demand curves determine market prices?"),
+        Topic(label: "Cognitive biases", prompt: "What are the most common cognitive biases and how do they trick us?"),
+        Topic(label: "Inflation explained", prompt: "What causes inflation and who wins and loses from it?"),
+        Topic(label: "Conformity experiments", prompt: "What did the Asch and Milgram experiments reveal about human behavior?"),
+        Topic(label: "Propaganda techniques", prompt: "How does propaganda work and how can you recognize it?"),
+        Topic(label: "Globalization", prompt: "What is globalization and what are its costs and benefits?"),
+        Topic(label: "Political spectrum", prompt: "What do left, right, liberal, and conservative actually mean?"),
+        Topic(label: "GDP and growth", prompt: "What does GDP measure and what does it miss?"),
+        Topic(label: "Opportunity cost", prompt: "What is opportunity cost and how does it shape every decision?"),
+        Topic(label: "Social media psychology", prompt: "How does social media hook our brains and shape behavior?"),
+        Topic(label: "Memory on trial", prompt: "How reliable is eyewitness memory according to psychology research?"),
+        Topic(label: "Central banks", prompt: "What does a central bank do and how does it fight inflation?"),
+    ]
+
+    private static let universitySocialScience: [Topic] = [
+        Topic(label: "Game theory equilibria", prompt: "Explain Nash equilibrium and its limitations in real-world scenarios"),
+        Topic(label: "Market microstructure", prompt: "How do order books and market makers affect price discovery?"),
+        Topic(label: "Mechanism design", prompt: "What is mechanism design and how does it relate to auction theory?"),
+        Topic(label: "Prospect theory", prompt: "How does prospect theory explain deviations from rational choice?"),
+        Topic(label: "Causal inference", prompt: "How do economists identify causation with instrumental variables and natural experiments?"),
+        Topic(label: "Public choice", prompt: "How does public choice theory explain government failure?"),
+        Topic(label: "Comparative advantage", prompt: "Why does comparative advantage make trade beneficial even for less productive countries?"),
+        Topic(label: "Monetary transmission", prompt: "How do central bank rate changes propagate through the economy?"),
+        Topic(label: "Social network theory", prompt: "How do network effects and weak ties shape opportunity and influence?"),
+        Topic(label: "Cultural capital", prompt: "What is Bourdieu's cultural capital and how does it reproduce inequality?"),
+        Topic(label: "IR theory", prompt: "How do realism and liberalism differ in explaining international relations?"),
+        Topic(label: "Median voter theorem", prompt: "What is the median voter theorem and where does it break down?"),
+    ]
+
+    // MARK: - Business & Finance
+
+    private static let elementaryBusiness: [Topic] = [
+        Topic(label: "Piggy bank power", prompt: "Why is it smart to save money?"),
+        Topic(label: "Lemonade stand", prompt: "How does a lemonade stand make money?"),
+        Topic(label: "What banks do", prompt: "Where does money go when you put it in a bank?"),
+        Topic(label: "Making change", prompt: "How do coins and bills add up when you buy something?"),
+        Topic(label: "Needs and wants", prompt: "What's the difference between things we need and things we want?"),
+        Topic(label: "Store stories", prompt: "How does a store get the toys it sells?"),
+        Topic(label: "Allowance adventures", prompt: "What can you learn from getting an allowance?"),
+        Topic(label: "Starting small", prompt: "How do people start their own businesses?"),
+        Topic(label: "Ads everywhere", prompt: "Why do companies make commercials?"),
+        Topic(label: "Fair trades", prompt: "How do people decide if a trade is fair?"),
+    ]
+
+    private static let middleSchoolBusiness: [Topic] = [
+        Topic(label: "Starting a business", prompt: "What does it take to start a small business?"),
+        Topic(label: "How banks make money", prompt: "How do banks make money from savings and loans?"),
+        Topic(label: "Interest explained", prompt: "What is interest and how does it make money grow or debt pile up?"),
+        Topic(label: "The stock market", prompt: "What is the stock market and how do people buy pieces of companies?"),
+        Topic(label: "Budget basics", prompt: "How do you make a budget and why does it matter?"),
+        Topic(label: "Brands and logos", prompt: "Why are brands so powerful and how do they earn trust?"),
+        Topic(label: "Credit cards", prompt: "How do credit cards work and what are their hidden costs?"),
+        Topic(label: "Entrepreneurs", prompt: "What makes entrepreneurs succeed where others give up?"),
+        Topic(label: "Taxes explained", prompt: "What are taxes and where does tax money go?"),
+        Topic(label: "Supply chains", prompt: "How does a product get from a factory to your doorstep?"),
+    ]
+
+    private static let highSchoolBusiness: [Topic] = [
+        Topic(label: "Compound interest", prompt: "How does compound interest make investments grow exponentially?"),
+        Topic(label: "Stocks vs bonds", prompt: "What's the difference between stocks and bonds and how risky is each?"),
+        Topic(label: "How startups work", prompt: "How do startups raise money from investors and what is equity?"),
+        Topic(label: "Business models", prompt: "What is a business model and how do companies like Netflix and Costco differ?"),
+        Topic(label: "Marketing psychology", prompt: "How does marketing use psychology to influence buying decisions?"),
+        Topic(label: "Index funds", prompt: "What is an index fund and why do many investors prefer them?"),
+        Topic(label: "Accounting basics", prompt: "What do income statements and balance sheets actually tell you?"),
+        Topic(label: "Monopolies", prompt: "Why are monopolies considered harmful and how are they regulated?"),
+        Topic(label: "Cryptocurrency", prompt: "How does cryptocurrency work and what gives it value?"),
+        Topic(label: "Personal finance", prompt: "What are the fundamentals of budgeting, saving, and building credit?"),
+    ]
+
+    private static let universityBusiness: [Topic] = [
+        Topic(label: "DCF valuation", prompt: "How does discounted cash flow valuation work and what are its pitfalls?"),
+        Topic(label: "Options and Greeks", prompt: "How do options work and what do the Greeks measure?"),
+        Topic(label: "Portfolio theory", prompt: "What is modern portfolio theory and how does diversification reduce risk?"),
+        Topic(label: "Venture capital", prompt: "How do venture capital funds work, from LPs to carry to power-law returns?"),
+        Topic(label: "Efficient markets", prompt: "What is the efficient market hypothesis and what anomalies challenge it?"),
+        Topic(label: "Capital structure", prompt: "How do firms choose between debt and equity — what does Modigliani-Miller say?"),
+        Topic(label: "Unit economics", prompt: "How do CAC, LTV, and churn determine whether a startup can scale?"),
+        Topic(label: "M&A strategy", prompt: "Why do most mergers destroy value and what makes acquisitions succeed?"),
+        Topic(label: "The yield curve", prompt: "What does the yield curve signal and why do inversions predict recessions?"),
+        Topic(label: "Behavioral finance", prompt: "How do investor biases create bubbles and market anomalies?"),
+    ]
+
+    // MARK: - Jobs & Careers (level-independent)
+
+    private static let careersTopics: [Topic] = [
         Topic(label: "Salary negotiation", prompt: "What are the best strategies for negotiating a higher salary at a new job or during a raise?"),
         Topic(label: "Resume that stands out", prompt: "How do I write a resume that gets past applicant tracking systems and impresses hiring managers?"),
         Topic(label: "Career pivoting", prompt: "How do professionals successfully pivot to a completely different career field?"),
@@ -118,32 +316,42 @@ enum TopicCatalog {
         Topic(label: "AI-proof career", prompt: "Which career skills are most resistant to AI automation and how do I develop them?"),
     ]
 
-    private static let pools: [ReadingLevel: [Topic]] = [
-        .elementary: elementaryTopics,
-        .middle: middleSchoolTopics,
-        .high: highSchoolTopics,
-        .university: universityTopics,
+    private static let pools: [ReadingLevel: [TopicCategory: [Topic]]] = [
+        .elementary: [
+            .science: elementaryScience,
+            .humanities: elementaryHumanities,
+            .socialScience: elementarySocialScience,
+            .business: elementaryBusiness,
+        ],
+        .middle: [
+            .science: middleSchoolScience,
+            .humanities: middleSchoolHumanities,
+            .socialScience: middleSchoolSocialScience,
+            .business: middleSchoolBusiness,
+        ],
+        .high: [
+            .science: highSchoolScience,
+            .humanities: highSchoolHumanities,
+            .socialScience: highSchoolSocialScience,
+            .business: highSchoolBusiness,
+        ],
+        .university: [
+            .science: universityScience,
+            .humanities: universityHumanities,
+            .socialScience: universitySocialScience,
+            .business: universityBusiness,
+        ],
     ]
 
-    /// Pick `count` random topics from the pool for the given reading level,
-    /// excluding prompts already shown. Recycles if pool runs dry.
-    static func pickTopics(level: ReadingLevel, count: Int = 8, excluding exclude: Set<String> = []) -> [Topic] {
-        let pool = pools[level]!
-        let filtered = pool.filter { !exclude.contains($0.prompt) }
-        if filtered.count < count {
-            let extraNeeded = count - filtered.count
-            let recycled = pool.shuffled().prefix(extraNeeded).map { $0 }
-            return filtered + recycled
-        }
-        return filtered
-            .shuffled()
-            .prefix(count)
-            .map { $0 }
-    }
-
-    /// Pick `count` random professional topics, excluding prompts already shown. Recycles if pool runs dry.
-    static func pickProfessionalTopics(count: Int = 8, excluding exclude: Set<String> = []) -> [Topic] {
-        let pool = professionalTopics
+    /// Pick `count` random topics for a section at the given reading level,
+    /// excluding prompts already shown. Recycles if the pool runs dry.
+    static func pickTopics(
+        category: TopicCategory,
+        level: ReadingLevel,
+        count: Int = 5,
+        excluding exclude: Set<String> = []
+    ) -> [Topic] {
+        let pool = category == .careers ? careersTopics : pools[level]![category]!
         let filtered = pool.filter { !exclude.contains($0.prompt) }
         if filtered.count < count {
             let extraNeeded = count - filtered.count

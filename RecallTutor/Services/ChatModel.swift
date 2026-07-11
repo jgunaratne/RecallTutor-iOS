@@ -42,13 +42,11 @@ final class ChatModel {
     /// Presents the Google sign-in sheet (required for the built-in tier).
     var showSignIn = false
 
-    // Home screen topic chips
-    var visibleTopics: [Topic] = []
-    var visibleProTopics: [Topic] = []
-    // True while a "More" tap is generating fresh topics via the AI — the
-    // button shows a spinner. Static-catalog refills are instant and never set these.
-    var isLoadingMoreTopics = false
-    var isLoadingMoreProTopics = false
+    // Home screen topic chips, one pool per section
+    var visibleTopics: [TopicCategory: [Topic]] = [:]
+    // Categories whose "More" tap is generating fresh topics via the AI — the
+    // button shows a spinner. Static-catalog refills are instant and never set this.
+    var loadingMoreCategories: Set<TopicCategory> = []
 
     // Snapshot of the last failed exchange so the error banner can offer Retry.
     private var retrySnapshot: [ChatMessage]?
@@ -84,8 +82,9 @@ final class ChatModel {
         #endif
         refreshProviders()
         conversations = HistoryStore.load()
-        visibleTopics = TopicCatalog.pickTopics(level: readingLevel)
-        visibleProTopics = TopicCatalog.pickProfessionalTopics()
+        for category in TopicCategory.allCases {
+            visibleTopics[category] = TopicCatalog.pickTopics(category: category, level: readingLevel)
+        }
         Task {
             await loadInitialTopics()
         }
@@ -359,73 +358,59 @@ final class ChatModel {
     func loadInitialTopics() async {
         // Static fallbacks are already loaded synchronously in init(), but we
         // ensure we have them if readingLevel changed.
-        visibleTopics = TopicCatalog.pickTopics(level: readingLevel)
-        visibleProTopics = TopicCatalog.pickProfessionalTopics()
+        for category in TopicCategory.allCases {
+            visibleTopics[category] = TopicCatalog.pickTopics(category: category, level: readingLevel)
+        }
 
         guard hasAPIKey else { return }
 
-        if let generated = try? await AIService.generateTopics(
-            provider: provider,
-            category: "Education",
-            readingLevel: readingLevel,
-            excluding: []
-        ) {
-            visibleTopics = generated
-        }
-
-        if let generatedPro = try? await AIService.generateTopics(
-            provider: provider,
-            category: "Jobs & Careers",
-            readingLevel: readingLevel,
-            excluding: []
-        ) {
-            visibleProTopics = generatedPro
+        // Generate all sections concurrently — sequential calls would keep the
+        // last sections on static fallbacks for several extra seconds.
+        let provider = provider
+        let level = readingLevel
+        await withTaskGroup(of: (TopicCategory, [Topic]?).self) { group in
+            for category in TopicCategory.allCases {
+                group.addTask {
+                    (category, try? await AIService.generateTopics(
+                        provider: provider,
+                        category: category.rawValue,
+                        readingLevel: level,
+                        excluding: []
+                    ))
+                }
+            }
+            for await (category, generated) in group {
+                if let generated {
+                    visibleTopics[category] = generated
+                }
+            }
         }
     }
 
-    func loadMoreTopics() {
-        guard !isLoadingMoreTopics else { return }
-        let existing = Set(visibleTopics.map(\.prompt))
+    func loadMoreTopics(for category: TopicCategory) {
+        guard !loadingMoreCategories.contains(category) else { return }
+        let existing = Set((visibleTopics[category] ?? []).map(\.prompt))
         if hasAPIKey {
-            isLoadingMoreTopics = true
+            loadingMoreCategories.insert(category)
             Task {
                 if let generated = try? await AIService.generateTopics(
                     provider: provider,
-                    category: "Education",
+                    category: category.rawValue,
                     readingLevel: readingLevel,
                     excluding: existing
                 ) {
-                    visibleTopics += generated
+                    visibleTopics[category, default: []] += generated
                 } else {
-                    visibleTopics += TopicCatalog.pickTopics(level: readingLevel, excluding: existing)
+                    visibleTopics[category, default: []] += TopicCatalog.pickTopics(
+                        category: category, level: readingLevel, excluding: existing
+                    )
                 }
-                isLoadingMoreTopics = false
+                loadingMoreCategories.remove(category)
             }
         } else {
-            visibleTopics += TopicCatalog.pickTopics(level: readingLevel, excluding: existing)
-        }
-    }
-
-    func loadMoreProTopics() {
-        guard !isLoadingMoreProTopics else { return }
-        let existing = Set(visibleProTopics.map(\.prompt))
-        if hasAPIKey {
-            isLoadingMoreProTopics = true
-            Task {
-                if let generated = try? await AIService.generateTopics(
-                    provider: provider,
-                    category: "Jobs & Careers",
-                    readingLevel: readingLevel,
-                    excluding: existing
-                ) {
-                    visibleProTopics += generated
-                } else {
-                    visibleProTopics += TopicCatalog.pickProfessionalTopics(excluding: existing)
-                }
-                isLoadingMoreProTopics = false
-            }
-        } else {
-            visibleProTopics += TopicCatalog.pickProfessionalTopics(excluding: existing)
+            visibleTopics[category, default: []] += TopicCatalog.pickTopics(
+                category: category, level: readingLevel, excluding: existing
+            )
         }
     }
 

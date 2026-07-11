@@ -203,7 +203,7 @@ struct GeminiClient {
         "properties": [
             "topics": [
                 "type": "ARRAY",
-                "description": "A list of 8 topics generated for the user.",
+                "description": "A list of 5 topics generated for the user.",
                 "items": [
                     "type": "OBJECT",
                     "properties": [

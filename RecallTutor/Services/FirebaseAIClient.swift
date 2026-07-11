@@ -170,7 +170,7 @@ enum FirebaseAIClient {
                         "prompt": .string(description: "The exact prompt/question to ask the tutor")
                     ]
                 ),
-                description: "A list of 8 topics generated for the user."
+                description: "A list of 5 topics generated for the user."
             )
         ]
     )
