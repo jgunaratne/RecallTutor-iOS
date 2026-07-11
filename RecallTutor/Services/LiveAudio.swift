@@ -30,12 +30,11 @@ final class LiveAudioRecorder {
 
     func start(onChunk: @escaping (String) -> Void) throws {
         let input = engine.inputNode
-        // Insert Apple's echo canceller. The .voiceChat session mode alone
-        // does NOT enable AEC for a plain input tap — without this the
-        // tutor's own speaker audio re-enters the mic and the server VAD
-        // barge-ins against it, cutting the tutor off mid-sentence. Failure
-        // is non-fatal: degrade to the raw mic rather than blocking it.
-        try? input.setVoiceProcessingEnabled(true)
+        // Deliberately NO setVoiceProcessingEnabled here: inserting the VPIO
+        // re-routes playback through the voice-processing chain and makes the
+        // speaker volume jump. Echo is mitigated instead by low server-side
+        // start-of-speech sensitivity and by ducking the player while the
+        // mic is open.
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0 else {
             throw NSError(domain: "LiveAudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone unavailable"])
@@ -94,7 +93,18 @@ final class LiveAudioPlayer {
     var onPlaybackEnd: (() -> Void)?
 
     var muted = false {
-        didSet { node.volume = muted ? 0 : 1.5 } // 1.5 = web app's makeup gain
+        didSet { applyVolume() }
+    }
+
+    /// Lowered gain while the mic is open — with no echo canceller in the
+    /// capture path, this is the main defense against the tutor's own speech
+    /// re-entering the mic and triggering barge-in.
+    var ducked = false {
+        didSet { applyVolume() }
+    }
+
+    private func applyVolume() {
+        node.volume = muted ? 0 : (ducked ? 1.0 : 1.5) // 1.5 = web app's makeup gain
     }
 
     init() {
