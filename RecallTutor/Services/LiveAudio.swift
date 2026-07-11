@@ -152,6 +152,46 @@ final class LiveAudioPlayer {
         }
     }
 
+    /// Play raw PCM 24kHz Int16 data — used by Firebase Live backend which
+    /// sends raw Data instead of base64.
+    func playChunkData(_ data: Data) {
+        let frames = data.count / 2
+        guard frames > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)) else { return }
+        buffer.frameLength = AVAudioFrameCount(frames)
+
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            let samples = raw.bindMemory(to: Int16.self)
+            let out = buffer.floatChannelData![0]
+            for i in 0..<frames {
+                out[i] = Float(samples[i]) / 32768
+            }
+        }
+
+        if !engine.isRunning {
+            try? engine.start()
+        }
+
+        if pending == 0 {
+            onPlaybackStart?()
+        }
+        pending += 1
+        let gen = generation
+        node.scheduleBuffer(buffer) { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.generation == gen else { return }
+                self.pending -= 1
+                if self.pending <= 0 {
+                    self.pending = 0
+                    self.onPlaybackEnd?()
+                }
+            }
+        }
+        if !node.isPlaying {
+            node.play()
+        }
+    }
+
     /// Barge-in: drop current + queued buffers but keep the engine alive so
     /// the model's next turn starts instantly.
     func flush() {
