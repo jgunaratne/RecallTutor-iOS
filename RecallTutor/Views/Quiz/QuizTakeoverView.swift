@@ -313,7 +313,7 @@ struct QuizTakeoverView: View {
 
     private func loadingRow(_ label: String) -> some View {
         HStack(spacing: 10) {
-            ProgressView().controlSize(.small).tint(Theme.accent)
+            ProgressView().controlSize(.large).tint(Theme.accent)
             Text(label)
                 .font(.appBody(size: 17))
                 .foregroundStyle(Theme.textTertiary)
@@ -406,7 +406,7 @@ struct QuizTakeoverView: View {
                         .foregroundStyle(Theme.textTertiary)
                     if feedback.isEmpty {
                         HStack(spacing: 8) {
-                            ProgressView().controlSize(.small).tint(Theme.accent)
+                            ProgressView().controlSize(.large).tint(Theme.accent)
                             Text("…").foregroundStyle(Theme.textTertiary)
                         }
                     } else {
