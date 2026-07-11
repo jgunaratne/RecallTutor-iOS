@@ -274,6 +274,9 @@ final class VoiceTutorManager {
                     self.recorder = recorder
                     self.errorMessage = nil
                     self.isMicOpen = true
+                    // Opening the mic is an explicit "my turn" — stop the
+                    // tutor's speech so it isn't talking into the open mic.
+                    self.player?.flush()
                 } catch {
                     self.errorMessage = error.localizedDescription
                 }

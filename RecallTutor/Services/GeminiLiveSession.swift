@@ -148,7 +148,9 @@ final class GeminiLiveSession {
             "realtimeInputConfig": [
                 "turnCoverage": "TURN_INCLUDES_ONLY_ACTIVITY",
                 "automaticActivityDetection": [
-                    "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
+                    // LOW start sensitivity: residual echo and room noise from
+                    // the open speakerphone mic must not register as barge-in.
+                    "startOfSpeechSensitivity": "START_SENSITIVITY_LOW",
                     "endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
                     "silenceDurationMs": 1000,
                     "prefixPaddingMs": 100,
