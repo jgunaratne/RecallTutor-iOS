@@ -401,19 +401,33 @@ final class ChatModel {
         voiceTutor?.quizStateChanged(isActive: false)
     }
 
-    /// "Go deeper" — start a fresh conversation diving further into the topic.
+    /// "Go deeper" — continue the conversation diving further into the topic.
     func goDeeper() {
         let topic = quizSource?.question ?? "the previous topic"
+        // Carry over the existing messages so the AI knows what was already
+        // covered and can dive deeper rather than repeating the same content.
+        let previousMessages = messages
         // The deep dive is a new lecture — the voice tutor must be rebuilt
         // around the new topic and cards, not the old set.
         tearDownVoiceTutor()
         quizSource = nil
         errorMessage = nil
-        activeId = nil
-        messages = []
-        sendMessage(
-            "Go deeper on the topic: \"\(topic)\". Please explain the advanced concepts, subtleties, and edge cases in more detail.",
-            fresh: true
-        )
+
+        let prompt = "Now go deeper on this topic. Cover advanced concepts, subtleties, edge cases, and related ideas that you haven't covered yet. Don't repeat what you already explained — build on it."
+        let userMessage = ChatMessage(role: .user, content: prompt)
+        messages = previousMessages + [userMessage]
+
+        if let convId = activeId {
+            updateConversation(convId) {
+                $0.messages = previousMessages + [userMessage]
+                $0.updatedAt = Date()
+            }
+            runExchange(previousMessages + [userMessage], convId: convId)
+        } else {
+            sendMessage(
+                "Go deeper on the topic: \"\(topic)\". Please explain the advanced concepts, subtleties, and edge cases in more detail.",
+                fresh: true
+            )
+        }
     }
 }
