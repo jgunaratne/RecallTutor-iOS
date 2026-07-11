@@ -199,7 +199,7 @@ struct InputBar: View {
     let onSend: () -> Void
 
     private var sendDisabled: Bool {
-        input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isStreaming
+        isStreaming
     }
 
     var body: some View {
@@ -219,10 +219,8 @@ struct InputBar: View {
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .glassEffect(
-                            .regular.tint(Theme.accentStrong.opacity(sendDisabled ? 0.45 : 1)).interactive(),
-                            in: .circle
-                        )
+                        .background(Theme.accentGradient, in: .circle)
+                        .opacity(sendDisabled ? 0.5 : 1.0)
                 }
                 .accessibilityLabel("Send")
                 .disabled(sendDisabled)
