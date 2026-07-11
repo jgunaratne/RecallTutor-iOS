@@ -409,17 +409,21 @@ struct QuizTakeoverView: View {
                         .font(.appBody(size: 13, weight: .medium))
                         .tracking(0.5)
                         .foregroundStyle(Theme.textTertiary)
-                    if feedback.isEmpty {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.large).tint(Theme.accent)
-                            Text("…").foregroundStyle(Theme.textTertiary)
-                        }
-                    } else {
+                    if !feedback.isEmpty {
                         Text(feedback)
                             .font(.appBody(size: 17))
                             .italic()
                             .lineSpacing(5)
                             .foregroundStyle(Theme.textSecondary)
+                    } else if !isLoading {
+                        // Once isLoading flips on (handleNext moving to the
+                        // next question), the full-screen Loading overlay
+                        // covers this — showing this spinner too, on top of
+                        // that one, is what produced the double-spinner.
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.large).tint(Theme.accent)
+                            Text("…").foregroundStyle(Theme.textTertiary)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
