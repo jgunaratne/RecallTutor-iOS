@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Google sign-in prompt for the built-in tutor (ported from podchat's
-/// SignInView). Shown when a user without an API key tries to generate a
+/// Sign-in prompt for the built-in tutor (ported from podchat's
+/// SignInView). Supports Sign in with Apple and Google Sign-In.
+/// Shown when a user without an API key tries to generate a
 /// lecture, and reachable from Settings. Signing in unlocks the built-in
 /// Gemini tier (3 free lectures, then Recall Tutor Pro).
 struct SignInSheet: View {
@@ -43,6 +44,22 @@ struct SignInSheet: View {
             Spacer()
 
             VStack(spacing: 12) {
+                Button {
+                    auth.signInWithApple()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "apple.logo")
+                            .font(.system(size: 20))
+                        Text("Sign in with Apple")
+                            .font(.appBody(size: 17, weight: .medium))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(Color.black, in: .rect(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .disabled(auth.isLoading)
+
                 Button {
                     auth.signInWithGoogle()
                 } label: {
