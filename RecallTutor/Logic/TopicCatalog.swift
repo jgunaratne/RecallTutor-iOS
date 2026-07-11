@@ -127,7 +127,7 @@ enum TopicCatalog {
 
     /// Pick `count` random topics from the pool for the given reading level,
     /// excluding prompts already shown.
-    static func pickTopics(level: ReadingLevel, count: Int = 6, excluding exclude: Set<String> = []) -> [Topic] {
+    static func pickTopics(level: ReadingLevel, count: Int = 8, excluding exclude: Set<String> = []) -> [Topic] {
         pools[level]!
             .filter { !exclude.contains($0.prompt) }
             .shuffled()
@@ -135,7 +135,7 @@ enum TopicCatalog {
             .map { $0 }
     }
 
-    static func pickProfessionalTopics(count: Int = 6, excluding exclude: Set<String> = []) -> [Topic] {
+    static func pickProfessionalTopics(count: Int = 8, excluding exclude: Set<String> = []) -> [Topic] {
         professionalTopics
             .filter { !exclude.contains($0.prompt) }
             .shuffled()
