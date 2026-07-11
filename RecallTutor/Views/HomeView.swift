@@ -31,21 +31,11 @@ struct HomeView: View {
                 inputFocused.wrappedValue = false
             }
 
-            // Input pinned to the bottom of the home screen.
-            VStack(spacing: 8) {
-                if let error = model.errorMessage {
-                    Text(error)
-                        .font(.appBody(size: 17))
-                        .foregroundStyle(Theme.danger)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(Theme.danger.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                InputBar(input: $input, isStreaming: model.isStreaming, focused: inputFocused, onSend: onSend)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            // Input pinned to the bottom of the home screen. Errors present
+            // as an alert from ChatView, so nothing shifts the layout here.
+            InputBar(input: $input, isStreaming: model.isStreaming, focused: inputFocused, onSend: onSend)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
         }
     }
 

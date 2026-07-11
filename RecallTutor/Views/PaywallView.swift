@@ -58,13 +58,21 @@ struct PaywallView: View {
         }
     }
 
+    /// True when the paywall is up because the free allowance ran out (vs.
+    /// being shown as the generic "subscribe or enter a key" screen).
+    private var limitReached: Bool {
+        AuthManager.shared.isSignedIn && manager.hasReachedFreeLimit && !manager.isPro
+    }
+
     private var header: some View {
         VStack(spacing: 12) {
             Image(systemName: "graduationcap.circle.fill")
                 .font(.system(size: 64, weight: .light))
                 .foregroundStyle(Theme.accent)
 
-            Text("You've used your \(SubscriptionManager.freeLectureLimit) free lectures")
+            Text(limitReached
+                 ? "You've used your \(SubscriptionManager.freeLectureLimit) free lectures"
+                 : "Unlock the tutor")
                 .font(.serifDisplay(size: 24))
                 .foregroundStyle(Theme.textPrimary)
                 .multilineTextAlignment(.center)
