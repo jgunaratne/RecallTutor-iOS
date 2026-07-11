@@ -48,6 +48,21 @@ struct ChatView: View {
         .sheet(isPresented: $model.showSignIn) {
             SignInSheet()
         }
+        // Errors surface as a modal so they never disturb the layout.
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { model.errorMessage != nil },
+                set: { if !$0 { model.dismissError() } }
+            )
+        ) {
+            if model.canRetry {
+                Button("Retry") { model.retry() }
+            }
+            Button("OK", role: .cancel) { model.dismissError() }
+        } message: {
+            Text(model.errorMessage ?? "")
+        }
         .sheet(isPresented: $subscriptions.showPaywall) {
             PaywallView(onOpenSettings: { showSettings = true })
         }
@@ -144,51 +159,6 @@ struct ChatView: View {
                 // Reset the pager per exchange, not per streamed chunk.
                 .id("\(model.activeId?.uuidString ?? "draft")-\(model.messages.count)")
             }
-
-            errorBanner
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-        }
-    }
-
-    // MARK: - Error banner
-
-    @ViewBuilder
-    private var errorBanner: some View {
-        if let error = model.errorMessage {
-            HStack(spacing: 12) {
-                Text(error)
-                    .font(.appBody(size: 17))
-                    .foregroundStyle(Theme.danger)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if model.canRetry {
-                    Button("Retry") { model.retry() }
-                        .font(.appBody(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.danger)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Theme.danger.opacity(0.3))
-                        )
-                }
-                Button {
-                    model.dismissError()
-                } label: {
-                    Text("Dismiss")
-                        .font(.appBody(size: 13))
-                        .underline()
-                        .foregroundStyle(Theme.danger.opacity(0.7))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Theme.danger.opacity(0.05))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Theme.danger.opacity(0.2))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
 

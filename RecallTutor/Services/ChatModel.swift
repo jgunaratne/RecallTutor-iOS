@@ -179,18 +179,24 @@ final class ChatModel {
     /// Stream one assistant reply for an already-recorded user turn. Kept
     /// separate from sendMessage so a failed exchange can be retried verbatim.
     private func runExchange(_ newMessages: [ChatMessage], convId: UUID) {
+        // No provider at all (no API key and no Firebase config): show the
+        // subscribe-or-enter-key screen instead of failing with an error.
+        guard hasAPIKey else {
+            rollBackDanglingTurn()
+            SubscriptionManager.shared.showPaywall = true
+            return
+        }
+
         // The built-in (Firebase) tier is account-bound and metered: 3 free
         // lectures, then Pro. Continuing an already-counted lecture is free.
         if provider == .firebase {
             guard AuthManager.shared.isSignedIn else {
-                errorMessage = ManagedAIError.signInRequired.localizedDescription
-                retrySnapshot = newMessages
+                rollBackDanglingTurn()
                 showSignIn = true
                 return
             }
             guard SubscriptionManager.shared.registerManagedLectureUse(lectureID: convId.uuidString) else {
-                errorMessage = ManagedAIError.subscriptionRequired.localizedDescription
-                retrySnapshot = newMessages
+                rollBackDanglingTurn()
                 SubscriptionManager.shared.showPaywall = true
                 return
             }
@@ -224,9 +230,16 @@ final class ChatModel {
                 }
             } catch {
                 if Task.isCancelled { return }
-                errorMessage = error.localizedDescription
-                retrySnapshot = newMessages
                 messages = newMessages
+                if case AnthropicError.missingAPIKey = error {
+                    // Key was removed / never set: the paywall doubles as the
+                    // "subscribe or enter your own key" screen (podchat-style).
+                    rollBackDanglingTurn()
+                    SubscriptionManager.shared.showPaywall = true
+                } else {
+                    retrySnapshot = newMessages
+                    errorMessage = error.localizedDescription
+                }
             }
             isStreaming = false
         }
@@ -240,6 +253,32 @@ final class ChatModel {
     func dismissError() {
         errorMessage = nil
         retrySnapshot = nil
+        // Without a reply there's nothing to show on the lecture screen —
+        // return to the pre-send state instead of an empty page.
+        rollBackDanglingTurn()
+    }
+
+    /// If the last turn is a user message that never got a reply (blocked by
+    /// the paywall/sign-in gate or a failed request the user chose not to
+    /// retry), drop it — otherwise the UI is left on an empty lecture screen.
+    /// A fresh lecture rolls all the way back to the home screen and removes
+    /// the conversation stub; a follow-up returns to the previous cards.
+    private func rollBackDanglingTurn() {
+        guard messages.last?.role == .user else { return }
+        let prior = Array(messages.dropLast())
+        messages = prior
+        retrySnapshot = nil
+        guard let convId = activeId else { return }
+        if prior.isEmpty {
+            conversations.removeAll { $0.id == convId }
+            persist()
+            activeId = nil
+        } else if conversations.contains(where: { $0.id == convId }) {
+            updateConversation(convId) {
+                $0.messages = prior
+                $0.updatedAt = Date()
+            }
+        }
     }
 
     // MARK: - Voice tutor
