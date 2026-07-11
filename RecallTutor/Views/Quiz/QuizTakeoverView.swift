@@ -190,7 +190,7 @@ struct QuizTakeoverView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
-                    .background(Theme.accentStrong, in: .capsule)
+                    .background(Theme.accentGradient, in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isLastQuestion ? "Results" : "Next")

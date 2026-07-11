@@ -122,7 +122,7 @@ struct PaywallView: View {
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(Theme.accentStrong, in: .rect(cornerRadius: 14))
+                    .background(Theme.accentGradient, in: .rect(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
                 .disabled(manager.isLoading)

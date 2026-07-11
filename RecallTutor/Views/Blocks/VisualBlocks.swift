@@ -182,7 +182,7 @@ struct FlowBlockView: View {
                             .monospacedDigit()
                             .foregroundStyle(.white)
                             .frame(width: 22, height: 22)
-                            .background(Circle().fill(Theme.accent))
+                            .background(Circle().fill(Theme.accentGradient))
                         Text(step)
                             .font(.appBody(size: 17, weight: .medium))
                             .foregroundStyle(Theme.textPrimary)
@@ -199,7 +199,7 @@ struct FlowBlockView: View {
                     if index < spec.steps.count - 1 {
                         Image(systemName: "arrow.down")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentGradient)
                             .frame(width: 22)
                             .padding(.vertical, 4)
                     }
