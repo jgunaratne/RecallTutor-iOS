@@ -84,9 +84,7 @@ struct SidebarView: View {
                     Image(systemName: "gearshape")
                         .font(.system(size: 22))
                     Spacer()
-                    Text(model.availableProviders.count > 1
-                         ? "\(model.provider.label) · Reading level: \(model.readingLevel.label)"
-                         : "Reading level: \(model.readingLevel.label)")
+                    Text("Reading level: \(model.readingLevel.label)")
                         .font(.appBody(size: 13))
                         .foregroundStyle(Theme.textTertiary)
                 }
