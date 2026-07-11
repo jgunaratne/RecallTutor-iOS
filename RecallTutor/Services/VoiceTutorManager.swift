@@ -9,8 +9,8 @@ import Observation
 final class VoiceTutorManager {
     let topic: String
     let readingLevel: ReadingLevel
-    // Chosen once per lecture (lazy) so reconnects keep the same voice.
-    private lazy var sessionVoice = LiveTutorPrompts.voice(topic: topic, level: readingLevel)
+    // Chosen once per lecture so reconnects keep the same voice.
+    private let sessionVoice: String
 
     private(set) var status: LiveSessionStatus = .idle
     private(set) var isMicOpen = false
@@ -60,6 +60,7 @@ final class VoiceTutorManager {
     init(topic: String, readingLevel: ReadingLevel) {
         self.topic = topic
         self.readingLevel = readingLevel
+        self.sessionVoice = LiveTutorPrompts.voice(topic: topic, level: readingLevel)
     }
 
     // MARK: - Connection
