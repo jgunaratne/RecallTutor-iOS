@@ -15,7 +15,7 @@ struct HomeView: View {
 
                     VStack(spacing: 24) {
                         Text("Select a topic to learn more about it.")
-                            .font(.appBody(size: 15))
+                            .font(.appBody(size: 17))
                             .foregroundStyle(Theme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
