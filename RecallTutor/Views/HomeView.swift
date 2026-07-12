@@ -21,16 +21,24 @@ struct HomeView: View {
 
                         ForEach(TopicCategory.allCases, id: \.self) { category in
                             sectionDivider(category.rawValue, icon: category.icon)
-                            topicGrid(
-                                model.visibleTopics[category] ?? [],
-                                isLoadingMore: model.loadingMoreCategories.contains(category),
-                                onLoadMore: { model.loadMoreTopics(for: category) }
-                            )
+                            if model.isLoadingTopics {
+                                placeholderGrid(seed: category.hashValue)
+                            } else {
+                                topicGrid(
+                                    model.visibleTopics[category] ?? [],
+                                    isLoadingMore: model.loadingMoreCategories.contains(category),
+                                    onLoadMore: { model.loadMoreTopics(for: category) }
+                                )
+                            }
                         }
                     }
+                    .animation(.easeOut(duration: 0.35), value: model.isLoadingTopics)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
+            }
+            .refreshable {
+                await model.refreshAllTopics()
             }
             .scrollDismissesKeyboard(.interactively)
             // Tap anywhere outside the input card to unfocus and close the
@@ -61,6 +69,22 @@ struct HomeView: View {
             Rectangle().fill(Theme.borderSoft).frame(height: 1)
         }
     }
+
+    // MARK: - Shimmer placeholders
+
+    /// Widths that mimic typical topic chip sizes, cycled per section via seed.
+    private static let placeholderWidths: [CGFloat] = [90, 120, 75, 140, 100, 110, 85]
+
+    private func placeholderGrid(seed: Int) -> some View {
+        FlowLayout(spacing: 8) {
+            ForEach(0..<5, id: \.self) { index in
+                let w = Self.placeholderWidths[(index + abs(seed)) % Self.placeholderWidths.count]
+                ShimmerChip(width: w, delayIndex: index)
+            }
+        }
+    }
+
+    // MARK: - Real topic grid
 
     private func topicGrid(_ topics: [Topic], isLoadingMore: Bool, onLoadMore: @escaping () -> Void) -> some View {
         let status = model.topicStatus
@@ -95,6 +119,48 @@ struct HomeView: View {
                 .disabled(isLoadingMore)
             }
         }
+    }
+}
+
+// MARK: - Shimmer chip placeholder
+
+/// A rounded skeleton chip with a left-to-right gradient sweep, matching
+/// the AI image loading shimmer in `CardIllustrationView`. Each chip gets
+/// a staggered delay so the row feels alive rather than sweeping in unison.
+struct ShimmerChip: View {
+    let width: CGFloat
+    let delayIndex: Int
+
+    @State private var shimmerPhase: CGFloat = -1
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(Theme.textTertiary.opacity(0.1))
+            .frame(width: width, height: 42)
+            .overlay(
+                GeometryReader { geo in
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, Theme.accent.opacity(0.12), .clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: geo.size.width * 0.6)
+                        .offset(x: shimmerPhase * geo.size.width)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .onAppear {
+                withAnimation(
+                    .easeInOut(duration: 1.4)
+                        .repeatForever(autoreverses: false)
+                        .delay(Double(delayIndex) * 0.08)
+                ) {
+                    shimmerPhase = 1.2
+                }
+            }
     }
 }
 

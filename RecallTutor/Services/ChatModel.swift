@@ -28,7 +28,8 @@ final class ChatModel {
     var readingLevel: ReadingLevel {
         didSet {
             UserDefaults.standard.set(readingLevel.rawValue, forKey: "recalltutor_reading_level")
-            Task {
+            topicLoadTask?.cancel()
+            topicLoadTask = Task {
                 await loadInitialTopics()
             }
         }
@@ -44,6 +45,9 @@ final class ChatModel {
 
     // Home screen topic chips, one pool per section
     var visibleTopics: [TopicCategory: [Topic]] = [:]
+    /// True while the initial (or refresh) topic load is in-flight.
+    /// HomeView shows shimmer placeholders instead of real chips.
+    var isLoadingTopics = true
     // Categories whose "More" tap is generating fresh topics via the AI — the
     // button shows a spinner. Static-catalog refills are instant and never set this.
     var loadingMoreCategories: Set<TopicCategory> = []
@@ -53,6 +57,9 @@ final class ChatModel {
     var canRetry: Bool { retrySnapshot != nil }
 
     private var streamTask: Task<Void, Never>?
+    /// Tracks the most recent topic-load task so pull-to-refresh (or a
+    /// reading-level change) can cancel a stale in-flight generation.
+    private var topicLoadTask: Task<Void, Never>?
 
     struct QuizSource {
         var question: String
@@ -82,10 +89,7 @@ final class ChatModel {
         #endif
         refreshProviders()
         conversations = HistoryStore.load()
-        for category in TopicCategory.allCases {
-            visibleTopics[category] = TopicCatalog.pickTopics(category: category, level: readingLevel)
-        }
-        Task {
+        topicLoadTask = Task {
             await loadInitialTopics()
         }
         #if DEBUG
@@ -360,36 +364,65 @@ final class ChatModel {
         }
     }
 
+    /// Replace every category's chips with fresh topics (pull-to-refresh).
+    func refreshAllTopics() async {
+        topicLoadTask?.cancel()
+        visibleTopics = [:]
+        isLoadingTopics = true
+        await loadInitialTopics()
+    }
+
+    /// Load topics: try AI generation first; fall back to the static catalog
+    /// if there's no API key or every request fails (including cancellation).
     func loadInitialTopics() async {
-        // Static fallbacks are already loaded synchronously in init(), but we
-        // ensure we have them if readingLevel changed.
+        isLoadingTopics = true
+        defer { isLoadingTopics = false }
+
+        if hasAPIKey {
+            let currentProvider = provider
+            let level = readingLevel
+            var aiResults: [TopicCategory: [Topic]] = [:]
+
+            await withTaskGroup(of: (TopicCategory, [Topic]?).self) { group in
+                for category in TopicCategory.allCases {
+                    group.addTask {
+                        // Cancelled tasks throw CancellationError; try? turns
+                        // that into nil, so aiResults stays empty → fallback.
+                        (category, try? await AIService.generateTopics(
+                            provider: currentProvider,
+                            category: category.rawValue,
+                            readingLevel: level,
+                            excluding: []
+                        ))
+                    }
+                }
+                for await (category, generated) in group {
+                    if let generated {
+                        aiResults[category] = generated
+                    }
+                }
+            }
+
+            if !aiResults.isEmpty {
+                // Fill any categories the AI missed with static picks.
+                for category in TopicCategory.allCases where aiResults[category] == nil {
+                    aiResults[category] = TopicCatalog.pickTopics(
+                        category: category, level: level
+                    )
+                }
+                visibleTopics = aiResults
+                return
+            }
+        }
+
+        // Fallback: no API key, all AI requests failed, or task cancelled.
+        var fallback: [TopicCategory: [Topic]] = [:]
         for category in TopicCategory.allCases {
-            visibleTopics[category] = TopicCatalog.pickTopics(category: category, level: readingLevel)
+            fallback[category] = TopicCatalog.pickTopics(
+                category: category, level: readingLevel
+            )
         }
-
-        guard hasAPIKey else { return }
-
-        // Generate all sections concurrently — sequential calls would keep the
-        // last sections on static fallbacks for several extra seconds.
-        let provider = provider
-        let level = readingLevel
-        await withTaskGroup(of: (TopicCategory, [Topic]?).self) { group in
-            for category in TopicCategory.allCases {
-                group.addTask {
-                    (category, try? await AIService.generateTopics(
-                        provider: provider,
-                        category: category.rawValue,
-                        readingLevel: level,
-                        excluding: []
-                    ))
-                }
-            }
-            for await (category, generated) in group {
-                if let generated {
-                    visibleTopics[category] = generated
-                }
-            }
-        }
+        visibleTopics = fallback
     }
 
     func loadMoreTopics(for category: TopicCategory) {
