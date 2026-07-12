@@ -21,16 +21,30 @@ final class VoiceTutorManager {
 
     private(set) var status: LiveSessionStatus = .idle {
         didSet {
-            // A card change that arrives while still connecting (common on
-            // the slower Firebase backend) used to be silently dropped by
-            // updateCards' guard below, with nothing to retry it once the
-            // connection completed — the tutor would just stay silent until
-            // the next flip. Replay whatever was last requested as soon as
-            // we're actually connected.
-            guard status == .connected, oldValue != .connected,
-                  let pending = pendingCardUpdate else { return }
-            pendingCardUpdate = nil
-            updateCards(all: pending.all, current: pending.current)
+            guard status != oldValue else { return }
+            if status == .connected {
+                errorMessage = nil
+                // A card change that arrives while still connecting (common on
+                // the slower Firebase backend) used to be silently dropped by
+                // updateCards' guard below, with nothing to retry it once the
+                // connection completed — the tutor would just stay silent until
+                // the next flip. Replay whatever was last requested as soon as
+                // we're actually connected.
+                if let pending = pendingCardUpdate {
+                    pendingCardUpdate = nil
+                    updateCards(all: pending.all, current: pending.current)
+                } else if droppedWhileConnected {
+                    // A backend-level reconnect (GoAway, transient drop) that
+                    // kept our card bookkeeping intact: the socket is live
+                    // again but the model has nothing to say until we ask, so
+                    // the tutor would sit silent mid-card. Nudge it to pick the
+                    // narration back up where it left off.
+                    resumeSpeaking("The voice connection dropped for a moment and is back.")
+                }
+                droppedWhileConnected = false
+            } else if oldValue == .connected {
+                droppedWhileConnected = true
+            }
         }
     }
     private(set) var isMicOpen = false
@@ -38,11 +52,21 @@ final class VoiceTutorManager {
     private(set) var errorMessage: String?
     var isMuted = false {
         didSet {
+            guard isMuted != oldValue else { return }
             player?.muted = isMuted
             if isMuted {
-                // Flush pending audio but keep the session alive.
+                // Flush pending audio but keep the session alive. Anything
+                // still speaking is audio the student won't hear, so it has to
+                // be spoken again on unmute.
+                missedAudioWhileMuted = isSpeaking
                 player?.flush()
                 isSpeaking = false
+            } else if missedAudioWhileMuted {
+                // The model talked through the mute and has since fallen
+                // silent — unmuting a finished turn just gives you silence, so
+                // ask it to pick the explanation back up.
+                missedAudioWhileMuted = false
+                resumeSpeaking("The student muted you and has just unmuted.")
             }
         }
     }
@@ -93,6 +117,17 @@ final class VoiceTutorManager {
     // .connected — replayed once the connection completes (see status'
     // didSet) instead of being silently dropped.
     private var pendingCardUpdate: (all: [String], current: String?)?
+    // The last card feed the view gave us, whatever the status at the time.
+    // A reconnect rebuilds the session from scratch, and the view only feeds
+    // cards on appear/flip — without this the tutor would come back connected
+    // but silent until the student flipped a card.
+    private var lastCardFeed: (all: [String], current: String?)?
+    // Set when a live session drops, so the next .connected transition knows
+    // it is a reconnect and should resume the lecture rather than sit idle.
+    private var droppedWhileConnected = false
+    // Set when tutor speech was thrown away because the student had muted —
+    // unmuting has to re-prompt, or the tutor stays silent until the next flip.
+    private var missedAudioWhileMuted = false
     // Pause tutor audio from the moment the quiz opens until its first
     // question is injected — the model is usually mid-turn on a card
     // explanation, and its remaining chunks would talk over the quiz intro.
@@ -180,6 +215,12 @@ final class VoiceTutorManager {
             },
             onAudioChunk: { [weak self] base64 in
                 guard let self, !self.suppressAudio else { return }
+                // Scheduling into a zero-volume player would let the turn play
+                // itself out inaudibly; drop it and remember to re-prompt.
+                guard !self.isMuted else {
+                    self.missedAudioWhileMuted = true
+                    return
+                }
                 self.player?.playChunk(base64)
             },
             onTextChunk: nil,
@@ -193,13 +234,7 @@ final class VoiceTutorManager {
         ))
         self.session = session
 
-        hasKickedOff = false
-        sentCards.removeAll()
-        readCards.removeAll()
-        lastSpokenCard = nil
-        sentQuiz = nil
-        sentAnswer = nil
-        sentQuizResult = nil
+        resetSessionState()
 
         session.connect(
             systemInstruction: systemInstruction,
@@ -224,6 +259,10 @@ final class VoiceTutorManager {
         }
         fbBackend.onAudioChunk = { [weak self] data in
             guard let self, !self.suppressAudio else { return }
+            guard !self.isMuted else {
+                self.missedAudioWhileMuted = true
+                return
+            }
             self.player?.playChunkData(data)
         }
         fbBackend.onAudioTurnStarted = { [weak self] in
@@ -240,6 +279,14 @@ final class VoiceTutorManager {
             self?.errorMessage = message
         }
 
+        resetSessionState()
+
+        fbBackend.connect()
+    }
+
+    /// Clear the per-session send bookkeeping and queue the card the student is
+    /// currently on, so a freshly built session resumes the lecture there.
+    private func resetSessionState() {
         hasKickedOff = false
         sentCards.removeAll()
         readCards.removeAll()
@@ -247,8 +294,28 @@ final class VoiceTutorManager {
         sentQuiz = nil
         sentAnswer = nil
         sentQuizResult = nil
+        droppedWhileConnected = false
+        missedAudioWhileMuted = false
+        pendingCardUpdate = lastCardFeed
+    }
 
-        fbBackend.connect()
+    /// Get the tutor talking again after its speech was cut off — on unmute, or
+    /// once a dropped connection comes back under an otherwise intact session.
+    /// Resumes on whatever the student is actually looking at: an unanswered
+    /// quiz question if one is open, otherwise the visible card.
+    private func resumeSpeaking(_ situation: String) {
+        guard status == .connected, hasKickedOff else { return }
+        player?.flush()
+
+        if let quiz = sentQuiz, sentQuizResult == nil, sentAnswer == nil {
+            backendSendText(
+                "[CURRENT QUIZ QUESTION]\n\(quiz)\n\n\(situation) Read this question out loud again, concisely. Do not reveal the correct answer."
+            )
+        } else if let current = lastCardFeed?.current ?? lastSpokenCard {
+            backendSendText(
+                "[CURRENT CARD]\n\(current)\n\n\(situation) Pick up from this card — do NOT greet me, re-introduce the topic, or start the lecture over. Briefly continue explaining this card's content."
+            )
+        }
     }
 
     func disconnect() {
@@ -268,7 +335,12 @@ final class VoiceTutorManager {
         hasKickedOff = false
         hasIntroduced = false
         pendingCardUpdate = nil
+        lastCardFeed = nil
         status = .idle
+        // After the status write, or its didSet would flag this deliberate
+        // teardown as a dropped connection to resume from.
+        droppedWhileConnected = false
+        missedAudioWhileMuted = false
         isSpeaking = false
         LiveAudioSession.deactivate()
     }
@@ -309,6 +381,8 @@ final class VoiceTutorManager {
     /// seeding once the conversation starts), and reads the visible card
     /// aloud on the first show and on each flip.
     func updateCards(all: [String], current: String?) {
+        lastCardFeed = (all, current)
+
         guard status == .connected else {
             pendingCardUpdate = (all, current)
             return

@@ -231,6 +231,10 @@ final class FirebaseLiveBackend {
             guard !Task.isCancelled, let self else { return }
             self.reconnectTask = nil
             self.cleanupSession()
+            // The drop leaves status on .connected (nothing else moves it), and
+            // connect() only accepts .idle/.error — without this the retry was
+            // a silent no-op and the tutor never came back.
+            self.status = .idle
             self.connect()
         }
     }

@@ -61,7 +61,11 @@ struct SettingsView: View {
                     } header: {
                         Text("AI provider")
                     } footer: {
-                        Text("Which model teaches, quizzes, and reacts.")
+                        // Explains what the *currently selected* option does —
+                        // a static "which model teaches, quizzes..." caption
+                        // left it unclear what picking "Built-in" specifically
+                        // meant or required versus a personal API key.
+                        Text(providerDescription(model.provider))
                     }
                 }
 
@@ -114,6 +118,21 @@ struct SettingsView: View {
                 PaywallView()
             }
             .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
+        }
+    }
+
+    /// Explains what picking this provider actually does — shown as the AI
+    /// provider picker's footer, describing the current selection rather
+    /// than a generic caption that doesn't distinguish "uses your own key"
+    /// from "uses Recall Tutor's built-in, metered tier."
+    private func providerDescription(_ provider: AIProvider) -> String {
+        switch provider {
+        case .anthropic:
+            return "Uses the Anthropic (Claude) API key you entered above. Never metered."
+        case .gemini:
+            return "Uses the Gemini API key you entered above. Never metered."
+        case .firebase:
+            return "Uses Recall Tutor's built-in AI — no API key needed. Free for your first \(SubscriptionManager.freeLectureLimit) lectures, then requires Recall Tutor Pro."
         }
     }
 
@@ -190,6 +209,12 @@ struct SettingsView: View {
                 }
             }
             #if DEBUG
+            // Opens the paywall regardless of sign-in/Pro/free-limit state —
+            // for capturing the App Store Connect subscription review
+            // screenshot without needing to actually exhaust free lectures.
+            Button("Preview Paywall (dev)") {
+                showPaywall = true
+            }
             Toggle("Pro Override (dev)", isOn: $subscriptions.manualProOverrideEnabled)
             Button("Reset Free Lecture Count (dev)") {
                 subscriptions.resetFreeUsage()
