@@ -17,6 +17,7 @@ struct LectureView: View {
     @State private var videoStatus: VideoService.Status?
     @State private var generatedVideoURL: URL?
     @State private var showVideoPlayer = false
+    @State private var showVideoLengthPicker = false
     @State private var videoTask: Task<Void, Never>?
 
     var body: some View {
@@ -141,10 +142,13 @@ struct LectureView: View {
                     VoiceControlBar(tutor: tutor)
                 }
 
-                // Video generation button
-                if Keychain.loadKey(.gemini) != nil {
+                // Video generation button — Veo needs a personal Gemini key
+                // (no Firebase-tier path), so it's hidden without one.
+                // availableProviders is observable state kept fresh by
+                // Settings saves, unlike a raw Keychain read.
+                if model.availableProviders.contains(.gemini) {
                     Button {
-                        startVideoGeneration(cards: cards, currentIndex: safeIndex)
+                        showVideoLengthPicker = true
                     } label: {
                         Image(systemName: "film")
                             .font(.system(size: 17, weight: .medium))
@@ -154,6 +158,22 @@ struct LectureView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(videoStatus != nil)
+                    .confirmationDialog(
+                        "Video length",
+                        isPresented: $showVideoLengthPicker,
+                        titleVisibility: .visible
+                    ) {
+                        ForEach(VideoService.ClipLength.allCases) { length in
+                            let cached = VideoService.hasCachedVideo(for: cards, length: length)
+                            Button(cached ? "\(length.label) — ready to play" : length.label) {
+                                startVideoGeneration(
+                                    cards: cards, currentIndex: safeIndex, length: length
+                                )
+                            }
+                        }
+                    } message: {
+                        Text("Already-generated videos play instantly; new ones take a few minutes.")
+                    }
                 }
 
                 Spacer()
@@ -230,25 +250,27 @@ struct LectureView: View {
 
     // MARK: - Video generation
 
-    private func startVideoGeneration(cards: [String], currentIndex: Int) {
+    private func startVideoGeneration(cards: [String], currentIndex: Int, length: VideoService.ClipLength) {
+        // Video generation takes over the session; hang up the live voice
+        // tutor so it doesn't keep talking underneath the progress overlay.
+        if let tutor = model.voiceTutor, tutor.status != .idle {
+            tutor.disconnect()
+        }
         videoTask?.cancel()
         videoTask = Task {
             do {
                 let refImage = imageGenerator.images[currentIndex]
                 let url = try await VideoService.generateFullVideo(
                     cards: cards,
+                    length: length,
                     referenceImage: refImage,
-                    onStatus: { status in
-                        videoStatus = status
-                        if case .complete = status {
-                            Task { @MainActor in
-                                try? await Task.sleep(nanoseconds: 800_000_000)
-                                showVideoPlayer = true
-                            }
-                        }
-                    }
+                    onStatus: { videoStatus = $0 }
                 )
+                // Play as soon as the URL is back — instant for cache hits,
+                // and the player itself is the completion signal.
                 generatedVideoURL = url
+                videoStatus = nil
+                showVideoPlayer = true
             } catch is CancellationError {
                 videoStatus = nil
             } catch {
@@ -270,12 +292,18 @@ struct LectureView: View {
                         .font(.appBody(size: 17, weight: .medium))
                         .foregroundStyle(Theme.textPrimary)
 
-                case .generatingSegment(let current, let total, let poll, let maxPolls):
+                case .generatingSegment(let current, let total, let poll, _):
                     ProgressView().controlSize(.large).tint(Theme.accent)
                     Text("Generating scene \(current) of \(total)")
                         .font(.appBody(size: 17, weight: .medium))
                         .foregroundStyle(Theme.textPrimary)
-                    ProgressView(value: Double(poll), total: Double(maxPolls))
+                    // Overall progress across all scenes. Within a scene,
+                    // pace against the typical ~3 min render (12 polls at
+                    // 15 s), capped so the bar only completes a scene's
+                    // share when the scene actually finishes.
+                    let withinScene = min(Double(poll) / 12.0, 0.95)
+                    let overall = (Double(current - 1) + withinScene) / Double(total)
+                    ProgressView(value: overall)
                         .tint(Theme.accent).frame(width: 200)
                     Text("This may take several minutes")
                         .font(.appBody(size: 14))
@@ -333,7 +361,9 @@ struct LectureView: View {
                 }
             }
             .padding(32)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
+            .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+            .padding(.horizontal, 32)
         }
     }
 

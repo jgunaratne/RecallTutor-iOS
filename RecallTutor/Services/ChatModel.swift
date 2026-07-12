@@ -132,6 +132,11 @@ final class ChatModel {
         if !availableProviders.contains(provider) {
             provider = availableProviders.contains(.anthropic) ? .anthropic : (availableProviders.first ?? .anthropic)
         }
+        // A personal Gemini key always beats the metered Firebase tier —
+        // never stay on Firebase once a key is available.
+        if provider == .firebase, availableProviders.contains(.gemini) {
+            provider = .gemini
+        }
     }
 
     // MARK: - History persistence

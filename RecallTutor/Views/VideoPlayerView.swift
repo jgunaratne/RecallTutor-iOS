@@ -8,7 +8,7 @@ struct VideoPlayerView: View {
     @State private var player: AVPlayer?
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .top) {
             if let player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
@@ -18,15 +18,36 @@ struct VideoPlayerView: View {
                     .tint(.white)
             }
 
-            Button {
-                player?.pause()
-                dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 30))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .padding(20)
+            // Top-right, clear of AVKit's own screencast/AirPlay control
+            // that lives at the top-left in full-screen playback.
+            HStack(spacing: 4) {
+                Spacer()
+
+                // Share sheet — covers Save Video (Photos), Save to Files,
+                // AirDrop, Messages, etc.
+                ShareLink(
+                    item: url,
+                    preview: SharePreview("Lecture Video")
+                ) {
+                    Image(systemName: "square.and.arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.vertical, 20)
+                        .padding(.leading, 20)
+                }
+
+                Button {
+                    player?.pause()
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 30))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding([.vertical, .trailing], 20)
+                        .padding(.leading, 8)
+                }
             }
         }
         .background(Color.black.ignoresSafeArea())

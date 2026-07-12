@@ -9,20 +9,50 @@ struct VoiceControlBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            speakerButton
+            // A dropped connection replaces the speaker with an explicit
+            // reconnect affordance — a slashed speaker read as "muted", so the
+            // one tap that would bring the tutor back went undiscovered.
+            if tutor.status == .error {
+                reconnectPill
+            } else {
+                speakerButton
 
-            if tutor.status == .connected {
-                micPill
-            }
+                if tutor.status == .connected {
+                    micPill
+                }
 
-            if let error = tutor.errorMessage {
-                Text(error)
-                    .font(.appBody(size: 13))
-                    .foregroundStyle(Theme.danger)
-                    .lineLimit(1)
-                    .frame(maxWidth: 110)
+                if let error = tutor.errorMessage {
+                    Text(error)
+                        .font(.appBody(size: 13))
+                        .foregroundStyle(Theme.danger)
+                        .lineLimit(1)
+                        .frame(maxWidth: 110)
+                }
             }
         }
+    }
+
+    private var reconnectPill: some View {
+        Button {
+            tutor.connect()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Reconnect")
+                    .font(.appBody(size: 15, weight: .medium))
+            }
+            .foregroundStyle(Theme.danger)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(Theme.danger.opacity(0.12), in: .capsule)
+            .overlay {
+                Capsule().stroke(Theme.danger.opacity(0.35), lineWidth: 1)
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Voice connection lost. Reconnect voice tutor")
     }
 
     private var speakerButton: some View {
@@ -77,25 +107,23 @@ struct VoiceControlBar: View {
     }
 
     private var speakerIcon: String {
-        switch tutor.status {
-        case .error: "speaker.slash"
-        default: tutor.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
-        }
+        // Mute slash only means something while connected; a disconnected
+        // tutor shows the plain speaker as its "start" affordance.
+        tutor.status == .connected && tutor.isMuted
+            ? "speaker.slash.fill" : "speaker.wave.2.fill"
     }
 
     private var speakerFill: Color {
         switch tutor.status {
         case .connecting: Theme.accent.opacity(0.2)
-        case .error: Theme.danger.opacity(0.1)
-        default: tutor.isMuted ? Theme.stateHover : Theme.accent.opacity(0.15)
+        case .connected: tutor.isMuted ? Theme.stateHover : Theme.accent.opacity(0.15)
+        default: .clear  // disconnected — no active fill
         }
     }
 
     private var speakerTint: Color {
-        switch tutor.status {
-        case .error: Theme.danger
-        default: tutor.isMuted ? Theme.textTertiary : Theme.accent
-        }
+        guard tutor.status == .connected else { return Theme.textSecondary }
+        return tutor.isMuted ? Theme.textTertiary : Theme.accent
     }
 
     private var micPill: some View {
