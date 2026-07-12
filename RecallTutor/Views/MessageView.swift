@@ -13,6 +13,12 @@ struct LectureView: View {
     @State private var currentIndex = 0
     @State private var imageGenerator = CardImageGenerator()
 
+    // Video generation
+    @State private var videoStatus: VideoService.Status?
+    @State private var generatedVideoURL: URL?
+    @State private var showVideoPlayer = false
+    @State private var videoTask: Task<Void, Never>?
+
     var body: some View {
         let cards = CardSplitter.splitIntoCards(message.content)
 
@@ -135,6 +141,21 @@ struct LectureView: View {
                     VoiceControlBar(tutor: tutor)
                 }
 
+                // Video generation button
+                if Keychain.loadKey(.gemini) != nil {
+                    Button {
+                        startVideoGeneration(cards: cards, currentIndex: safeIndex)
+                    } label: {
+                        Image(systemName: "film")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(videoStatus != nil)
+                }
+
                 Spacer()
 
                 if isLastCard && showQuizButton {
@@ -194,6 +215,125 @@ struct LectureView: View {
             if !isStreaming {
                 imageGenerator.generateImages(for: cards)
             }
+        }
+        .overlay {
+            if let status = videoStatus, !showVideoPlayer {
+                videoProgressOverlay(status: status)
+            }
+        }
+        .fullScreenCover(isPresented: $showVideoPlayer) {
+            if let url = generatedVideoURL {
+                VideoPlayerView(url: url)
+            }
+        }
+    }
+
+    // MARK: - Video generation
+
+    private func startVideoGeneration(cards: [String], currentIndex: Int) {
+        videoTask?.cancel()
+        videoTask = Task {
+            do {
+                let refImage = imageGenerator.images[currentIndex]
+                let url = try await VideoService.generateFullVideo(
+                    cards: cards,
+                    referenceImage: refImage,
+                    onStatus: { status in
+                        videoStatus = status
+                        if case .complete = status {
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 800_000_000)
+                                showVideoPlayer = true
+                            }
+                        }
+                    }
+                )
+                generatedVideoURL = url
+            } catch is CancellationError {
+                videoStatus = nil
+            } catch {
+                videoStatus = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    private func videoProgressOverlay(status: VideoService.Status) -> some View {
+        ZStack {
+            Color.black.opacity(0.5).ignoresSafeArea()
+                .onTapGesture { /* block taps */ }
+
+            VStack(spacing: 20) {
+                switch status {
+                case .preparingScript:
+                    ProgressView().controlSize(.large).tint(Theme.accent)
+                    Text("Writing narration script…")
+                        .font(.appBody(size: 17, weight: .medium))
+                        .foregroundStyle(Theme.textPrimary)
+
+                case .generatingSegment(let current, let total, let poll, let maxPolls):
+                    ProgressView().controlSize(.large).tint(Theme.accent)
+                    Text("Generating scene \(current) of \(total)")
+                        .font(.appBody(size: 17, weight: .medium))
+                        .foregroundStyle(Theme.textPrimary)
+                    ProgressView(value: Double(poll), total: Double(maxPolls))
+                        .tint(Theme.accent).frame(width: 200)
+                    Text("This may take several minutes")
+                        .font(.appBody(size: 14))
+                        .foregroundStyle(Theme.textTertiary)
+
+                case .concatenating:
+                    ProgressView().controlSize(.large).tint(Theme.accent)
+                    Text("Stitching scenes together…")
+                        .font(.appBody(size: 17)).foregroundStyle(Theme.textPrimary)
+
+                case .generatingVoiceover:
+                    ProgressView().controlSize(.large).tint(Theme.accent)
+                    Text("Recording narration…")
+                        .font(.appBody(size: 17)).foregroundStyle(Theme.textPrimary)
+
+                case .muxing:
+                    ProgressView().controlSize(.large).tint(Theme.accent)
+                    Text("Finalizing video…")
+                        .font(.appBody(size: 17)).foregroundStyle(Theme.textPrimary)
+
+                case .complete:
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 40)).foregroundStyle(Theme.accent)
+                    Text("Video ready!")
+                        .font(.appBody(size: 17, weight: .medium))
+                        .foregroundStyle(Theme.textPrimary)
+
+                case .error(let message):
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 40)).foregroundStyle(Theme.danger)
+                    Text("Video generation failed")
+                        .font(.appBody(size: 17, weight: .medium))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(message)
+                        .font(.appBody(size: 14))
+                        .foregroundStyle(Theme.textTertiary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                }
+
+                Button {
+                    if status.isDismissable {
+                        videoStatus = nil
+                    } else {
+                        videoTask?.cancel()
+                        videoStatus = nil
+                    }
+                } label: {
+                    Text(status.isDismissable ? "Close" : "Cancel")
+                        .font(.appBody(size: 15, weight: .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                        .padding(.horizontal, 20)
+                        .frame(height: 36)
+                        .background(Theme.statePill, in: .capsule)
+                }
+            }
+            .padding(32)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
         }
     }
 
