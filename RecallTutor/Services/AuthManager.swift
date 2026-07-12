@@ -139,7 +139,7 @@ final class AuthManager: NSObject {
 
                 if let error {
                     // Don't show error for user cancellation.
-                    if (error as NSError).code != GIDSignInError.canceled.rawValue {
+                    if !Self.isUserCancellation(error) {
                         self.errorMessage = error.localizedDescription
                     }
                     return
@@ -165,6 +165,27 @@ final class AuthManager: NSObject {
                 }
             }
         }
+    }
+
+    /// True for every shape Google Sign-In uses to report "the user backed
+    /// out" — not just `GIDSignInError.canceled` (dismissing the picker
+    /// sheet before it loads), but also `access_denied`, which is what
+    /// Google's OAuth server returns if the user backs out or taps Cancel
+    /// on the actual web consent/account page instead. That case carries a
+    /// different error code and previously fell through to being shown as a
+    /// real error.
+    private static func isUserCancellation(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.code == GIDSignInError.canceled.rawValue { return true }
+        if nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue { return true }
+        let description = nsError.localizedDescription.lowercased()
+        if description.contains("access_denied") || description.contains("cancel") { return true }
+        // Some SDK versions nest the real OAuth error under this key instead
+        // of surfacing it as the top-level error's code/description.
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isUserCancellation(underlying)
+        }
+        return false
     }
 
     // MARK: - Sign out

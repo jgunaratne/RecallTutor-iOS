@@ -15,7 +15,7 @@ struct PaywallView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
                     header
 
                     VStack(spacing: 14) {
@@ -28,11 +28,6 @@ struct PaywallView: View {
                             icon: "checkmark.circle.fill",
                             title: "Unlimited quizzes",
                             detail: "Test yourself after every lecture and track mastery"
-                        )
-                        featureRow(
-                            icon: "sparkles",
-                            title: "Powered by Gemini",
-                            detail: "Fast, high-quality answers funded by your subscription"
                         )
                     }
                     .padding(.horizontal, 20)
@@ -78,7 +73,7 @@ struct PaywallView: View {
                 .multilineTextAlignment(.center)
 
             Text("Subscribe for unlimited lectures and quizzes, or add your own API key in Settings — that path is always free.")
-                .font(.appBody(size: 15))
+                .font(.appBody(size: 16))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
@@ -96,7 +91,7 @@ struct PaywallView: View {
                     .font(.appBody(size: 16, weight: .medium))
                     .foregroundStyle(Theme.textPrimary)
                 Text(detail)
-                    .font(.appBody(size: 14))
+                    .font(.appBody(size: 13))
                     .foregroundStyle(Theme.textSecondary)
             }
             Spacer(minLength: 0)
@@ -117,7 +112,7 @@ struct PaywallView: View {
             Link("Privacy Policy", destination: URL(string: "https://gunaratne.com/recall-tutor/privacy")!)
             Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
         }
-        .font(.appBody(size: 12, weight: .medium))
+        .font(.appBody(size: 13, weight: .medium))
         .foregroundStyle(Theme.accent)
     }
 
@@ -130,7 +125,7 @@ struct PaywallView: View {
                 } label: {
                     VStack(spacing: 2) {
                         Text("Subscribe — \(product.displayPrice)/month")
-                            .font(.appBody(size: 17, weight: .semibold))
+                            .font(.appBody(size: 16, weight: .semibold))
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 52)
@@ -140,7 +135,7 @@ struct PaywallView: View {
                 .disabled(manager.isLoading)
 
                 Text("Auto-renews monthly until cancelled. Cancel anytime in Settings at least 24 hours before the period ends.")
-                    .font(.appBody(size: 12))
+                    .font(.appBody(size: 13))
                     .foregroundStyle(Theme.textTertiary)
                     .multilineTextAlignment(.center)
 
@@ -150,7 +145,7 @@ struct PaywallView: View {
                     .padding(.vertical, 16)
             } else {
                 Text("Subscription unavailable right now. You can always add your own API key in Settings.")
-                    .font(.appBody(size: 14))
+                    .font(.appBody(size: 13))
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
             }
@@ -166,7 +161,7 @@ struct PaywallView: View {
                 Task { await manager.restore() }
             } label: {
                 Text("Restore Purchases")
-                    .font(.appBody(size: 15))
+                    .font(.appBody(size: 16))
                     .foregroundStyle(Theme.textSecondary)
             }
             .buttonStyle(.plain)
@@ -177,7 +172,7 @@ struct PaywallView: View {
                 onOpenSettings()
             } label: {
                 Text("Use my own API key instead")
-                    .font(.appBody(size: 15, weight: .medium))
+                    .font(.appBody(size: 16, weight: .medium))
                     .foregroundStyle(Theme.accent)
             }
             .buttonStyle(.plain)
