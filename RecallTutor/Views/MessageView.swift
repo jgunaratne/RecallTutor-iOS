@@ -159,7 +159,7 @@ struct LectureView: View {
                     .buttonStyle(.plain)
                     .disabled(videoStatus != nil)
                     .confirmationDialog(
-                        "Video length",
+                        "Create video",
                         isPresented: $showVideoLengthPicker,
                         titleVisibility: .visible
                     ) {
@@ -172,7 +172,7 @@ struct LectureView: View {
                             }
                         }
                     } message: {
-                        Text("Already-generated videos play instantly; new ones take a few minutes.")
+                        Text("Generate an instructional video. This will take a few minutes.")
                     }
                 }
 
