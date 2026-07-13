@@ -142,7 +142,7 @@ struct ShimmerChip: View {
                     RoundedRectangle(cornerRadius: 20)
                         .fill(
                             LinearGradient(
-                                colors: [.clear, Theme.accent.opacity(0.12), .clear],
+                                colors: [.clear, Theme.textTertiary.opacity(0.25), .clear],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
