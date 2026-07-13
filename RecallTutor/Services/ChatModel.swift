@@ -89,6 +89,12 @@ final class ChatModel {
         #endif
         refreshProviders()
         conversations = HistoryStore.load()
+        // Show cached topics instantly (no shimmers), then silently refresh
+        // in the background. If no cache exists, shimmers show as before.
+        if let cached = TopicCache.load(for: readingLevel) {
+            visibleTopics = cached
+            isLoadingTopics = false
+        }
         topicLoadTask = Task {
             await loadInitialTopics()
         }
@@ -379,8 +385,15 @@ final class ChatModel {
 
     /// Load topics: try AI generation first; fall back to the static catalog
     /// if there's no API key or every request fails (including cancellation).
+    ///
+    /// When cached topics are already visible (populated in `init`), we skip
+    /// the shimmer state and silently swap in fresh AI results.
     func loadInitialTopics() async {
-        isLoadingTopics = true
+        let hasCachedTopics = !visibleTopics.isEmpty
+        // Only show shimmers if nothing is on screen yet.
+        if !hasCachedTopics {
+            isLoadingTopics = true
+        }
         defer { isLoadingTopics = false }
 
         if hasAPIKey {
@@ -416,6 +429,7 @@ final class ChatModel {
                     )
                 }
                 visibleTopics = aiResults
+                TopicCache.save(aiResults, level: level)
                 return
             }
         }
