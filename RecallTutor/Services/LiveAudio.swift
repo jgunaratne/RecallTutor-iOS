@@ -44,14 +44,15 @@ final class LiveAudioRecorder {
         guard inputFormat.sampleRate > 0 else {
             throw NSError(domain: "LiveAudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone unavailable"])
         }
+        let targetSampleRate = sampleRate
         guard let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt16, sampleRate: sampleRate, channels: 1, interleaved: true
+            commonFormat: .pcmFormatInt16, sampleRate: targetSampleRate, channels: 1, interleaved: true
         ), let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
             throw NSError(domain: "LiveAudio", code: 2, userInfo: [NSLocalizedDescriptionKey: "Audio converter unavailable"])
         }
 
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
-            let ratio = sampleRate / inputFormat.sampleRate
+            let ratio = targetSampleRate / inputFormat.sampleRate
             let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 16
             guard let out = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
 
