@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var anthropicKey = ""
     @State private var geminiKey = ""
+    @State private var openAIKey = ""
     @State private var auth = AuthManager.shared
     @State private var subscriptions = SubscriptionManager.shared
     @State private var showPaywall = false
@@ -47,7 +48,20 @@ struct SettingsView: View {
                          : "Optional — enables the Gemini tutor as a second provider (aistudio.google.com).")
                 }
 
-                if model.availableProviders.count > 1 {
+                Section {
+                    SecureField("sk-…", text: $openAIKey)
+                        .font(.system(size: 17, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("OpenAI API key")
+                } footer: {
+                    Text(model.availableProviders.contains(.openai)
+                         ? "A key is saved in the Keychain. Enter a new one to replace it."
+                         : "When entered, OpenAI generates lectures, quizzes, feedback, voice, and illustrations (platform.openai.com).")
+                }
+
+                if model.availableProviders.count > 1, !model.hasOpenAIKey {
                     Section {
                         Picker("AI provider", selection: Binding(
                             get: { model.provider },
@@ -89,7 +103,8 @@ struct SettingsView: View {
                     Button("Done") {
                         model.saveKeys(
                             anthropic: anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines),
-                            gemini: geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                            gemini: geminiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+                            openai: openAIKey.trimmingCharacters(in: .whitespacesAndNewlines)
                         )
                         dismiss()
                     }
@@ -98,6 +113,7 @@ struct SettingsView: View {
             .onAppear {
                 anthropicKey = Keychain.loadKey(.anthropic) ?? ""
                 geminiKey = Keychain.loadKey(.gemini) ?? ""
+                openAIKey = Keychain.loadKey(.openai) ?? ""
             }
             .task {
                 if AuthManager.isFirebaseConfigured, auth.isSignedIn {

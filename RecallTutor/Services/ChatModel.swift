@@ -20,8 +20,8 @@ final class ChatModel {
     var quizSource: QuizSource?
     var masteryNote: MasteryNote?
 
-    // Gemini Live voice tutor — one session per lecture, only when a Gemini
-    // key is configured (mirrors GeminiLiveOverlay's mount-per-last-message).
+    // Realtime voice tutor — one session per lecture when a Gemini or OpenAI
+    // key is configured (mirrors the web app's mount-per-last-message).
     var voiceTutor: VoiceTutorManager?
 
     // Settings
@@ -35,10 +35,20 @@ final class ChatModel {
         }
     }
     var provider: AIProvider {
-        didSet { UserDefaults.standard.set(provider.rawValue, forKey: "recalltutor_provider") }
+        didSet {
+            // An OpenAI key is an app-wide provider choice, not merely an
+            // optional entry in the picker: it governs text, realtime audio,
+            // and illustrations together.
+            if provider != .openai, Keychain.loadKey(.openai) != nil {
+                provider = .openai
+            } else {
+                UserDefaults.standard.set(provider.rawValue, forKey: "recalltutor_provider")
+            }
+        }
     }
     var availableProviders: [AIProvider] = []
     var hasAPIKey: Bool { !availableProviders.isEmpty }
+    var hasOpenAIKey: Bool { Keychain.loadKey(.openai) != nil }
 
     /// Presents the Google sign-in sheet (required for the built-in tier).
     var showSignIn = false
@@ -78,13 +88,17 @@ final class ChatModel {
         provider = savedProvider.flatMap(AIProvider.init(rawValue:)) ?? .anthropic
         #if DEBUG
         // Simulator convenience: seed keys from the environment
-        // (launch with SIMCTL_CHILD_ANTHROPIC_API_KEY=... / SIMCTL_CHILD_GEMINI_API_KEY=...).
+        // (launch with SIMCTL_CHILD_ANTHROPIC_API_KEY=..., SIMCTL_CHILD_GEMINI_API_KEY=...,
+        // or SIMCTL_CHILD_OPENAI_API_KEY=...).
         let env = ProcessInfo.processInfo.environment
         if Keychain.loadKey(.anthropic) == nil, let key = env["ANTHROPIC_API_KEY"], !key.isEmpty {
             Keychain.saveKey(key, account: .anthropic)
         }
         if Keychain.loadKey(.gemini) == nil, let key = env["GEMINI_API_KEY"], !key.isEmpty {
             Keychain.saveKey(key, account: .gemini)
+        }
+        if Keychain.loadKey(.openai) == nil, let key = env["OPENAI_API_KEY"], !key.isEmpty {
+            Keychain.saveKey(key, account: .openai)
         }
         #endif
         refreshProviders()
@@ -119,16 +133,22 @@ final class ChatModel {
 
     // MARK: - Settings
 
-    func saveKeys(anthropic: String, gemini: String) {
+    func saveKeys(anthropic: String, gemini: String, openai: String) {
         Keychain.saveKey(anthropic, account: .anthropic)
         Keychain.saveKey(gemini, account: .gemini)
+        Keychain.saveKey(openai, account: .openai)
         refreshProviders()
     }
 
-    /// Recompute which providers have keys, keeping the current choice when
-    /// it's still available — otherwise fall back (mirrors Chat.tsx).
+    /// Recompute which providers have keys. A supplied OpenAI key opts the
+    /// entire tutor into OpenAI for text, realtime audio, and illustrations;
+    /// without one, retain the existing Gemini/Firebase selection behavior.
     private func refreshProviders() {
         availableProviders = AIService.availableProviders()
+        if Keychain.loadKey(.openai) != nil {
+            provider = .openai
+            return
+        }
         if !availableProviders.contains(provider) {
             provider = availableProviders.contains(.anthropic) ? .anthropic : (availableProviders.first ?? .anthropic)
         }
@@ -248,6 +268,11 @@ final class ChatModel {
                     // "subscribe or enter your own key" screen (podchat-style).
                     rollBackDanglingTurn()
                     SubscriptionManager.shared.showPaywall = true
+                } else if case OpenAIError.missingAPIKey = error {
+                    // Key was removed / never set: the paywall doubles as the
+                    // "subscribe or enter your own key" screen (podchat-style).
+                    rollBackDanglingTurn()
+                    SubscriptionManager.shared.showPaywall = true
                 } else {
                     retrySnapshot = newMessages
                     errorMessage = error.localizedDescription
@@ -299,10 +324,10 @@ final class ChatModel {
     /// Creates and auto-connects the tutor on the first cards of a lecture
     /// (web parity: the overlay auto-connects on mount).
     func voiceTutorCardsChanged(all: [String], current: String?) {
-        // Voice works with a Gemini key (raw WebSocket) or, without one, via
-        // the Firebase AI tier — which is account-bound, so it needs sign-in.
-        // Mirrors the backend selection in VoiceTutorManager.connect().
+        // Voice works with a Gemini or OpenAI key, or without a personal key
+        // via the Firebase AI tier. Mirrors VoiceTutorManager.connect().
         let canUseVoice = Keychain.loadKey(.gemini) != nil
+            || Keychain.loadKey(.openai) != nil
             || (FirebaseAIClient.isAvailable && AuthManager.shared.isSignedIn)
         guard canUseVoice else { return }
         let topic = messages.first(where: { $0.role == .user })?.content ?? ""
@@ -310,7 +335,7 @@ final class ChatModel {
 
         if voiceTutor == nil || voiceTutor?.topic != topic {
             voiceTutor?.disconnect()
-            let tutor = VoiceTutorManager(topic: topic, readingLevel: readingLevel)
+            let tutor = VoiceTutorManager(topic: topic, readingLevel: readingLevel, provider: provider)
             voiceTutor = tutor
             tutor.connect()
         } else if voiceTutor?.status == .error {

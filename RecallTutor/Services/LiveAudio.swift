@@ -19,10 +19,15 @@ enum LiveAudioSession {
 
 // MARK: - Recorder
 
-/// Captures the mic, converts to 16 kHz 16-bit mono PCM, and emits
-/// base64-encoded chunks.
+/// Captures the mic, converts to the provider's requested Int16 mono PCM
+/// sample rate, and emits base64-encoded chunks.
 final class LiveAudioRecorder {
     private let engine = AVAudioEngine()
+    private let sampleRate: Double
+
+    init(sampleRate: Double = 16_000) {
+        self.sampleRate = sampleRate
+    }
 
     static func requestPermission() async -> Bool {
         await AVAudioApplication.requestRecordPermission()
@@ -40,13 +45,13 @@ final class LiveAudioRecorder {
             throw NSError(domain: "LiveAudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone unavailable"])
         }
         guard let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true
+            commonFormat: .pcmFormatInt16, sampleRate: sampleRate, channels: 1, interleaved: true
         ), let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
             throw NSError(domain: "LiveAudio", code: 2, userInfo: [NSLocalizedDescriptionKey: "Audio converter unavailable"])
         }
 
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
-            let ratio = 16_000 / inputFormat.sampleRate
+            let ratio = sampleRate / inputFormat.sampleRate
             let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 16
             guard let out = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
 
