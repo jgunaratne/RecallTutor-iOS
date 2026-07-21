@@ -127,7 +127,7 @@ final class OpenAIRealtimeSession {
                 guard epoch == sessionEpoch else { return }
                 let data: Data?
                 switch message {
-                case .data(let data): data = data
+                case .data(let binaryData): data = binaryData
                 case .string(let text): data = text.data(using: .utf8)
                 @unknown default: data = nil
                 }
