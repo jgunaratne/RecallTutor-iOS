@@ -67,7 +67,9 @@ final class OpenAIRealtimeSession {
                         "turn_detection": NSNull(),
                     ],
                     "output": [
-                        "format": ["type": "audio/pcm"],
+                        // OpenAI requires the PCM output sample rate as well
+                        // as its encoding. It must match the player format.
+                        "format": ["type": "audio/pcm", "rate": Self.inputSampleRate],
                         "voice": voice,
                     ],
                 ],
