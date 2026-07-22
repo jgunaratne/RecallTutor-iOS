@@ -158,21 +158,15 @@ struct LectureView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(videoStatus != nil)
-                    .confirmationDialog(
-                        "Create video",
-                        isPresented: $showVideoLengthPicker,
-                        titleVisibility: .visible
-                    ) {
-                        ForEach(VideoService.ClipLength.allCases) { length in
-                            let cached = VideoService.hasCachedVideo(for: cards, length: length)
-                            Button(cached ? "\(length.label) — ready to play" : length.label) {
-                                startVideoGeneration(
-                                    cards: cards, currentIndex: safeIndex, length: length
-                                )
-                            }
+                    .fullScreenCover(isPresented: $showVideoLengthPicker) {
+                        VideoOptionsDialog(cards: cards) { length, fastGeneration in
+                            startVideoGeneration(
+                                cards: cards,
+                                currentIndex: safeIndex,
+                                length: length,
+                                fastGeneration: fastGeneration
+                            )
                         }
-                    } message: {
-                        Text("Generate an instructional video. This will take a few minutes.")
                     }
                 }
 
@@ -250,7 +244,12 @@ struct LectureView: View {
 
     // MARK: - Video generation
 
-    private func startVideoGeneration(cards: [String], currentIndex: Int, length: VideoService.ClipLength) {
+    private func startVideoGeneration(
+        cards: [String],
+        currentIndex: Int,
+        length: VideoService.ClipLength,
+        fastGeneration: Bool
+    ) {
         // Video generation takes over the session; hang up the live voice
         // tutor so it doesn't keep talking underneath the progress overlay.
         if let tutor = model.voiceTutor, tutor.status != .idle {
@@ -264,6 +263,7 @@ struct LectureView: View {
                     cards: cards,
                     length: length,
                     referenceImage: refImage,
+                    fastGeneration: fastGeneration,
                     onStatus: { videoStatus = $0 }
                 )
                 // Play as soon as the URL is back — instant for cache hits,

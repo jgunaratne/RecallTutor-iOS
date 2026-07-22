@@ -8,19 +8,15 @@ struct VideoPlayerView: View {
     @State private var player: AVPlayer?
 
     var body: some View {
-        ZStack(alignment: .top) {
-            if let player {
-                VideoPlayer(player: player)
-                    .ignoresSafeArea()
-            } else {
-                Color.black.ignoresSafeArea()
-                ProgressView()
-                    .tint(.white)
-            }
-
-            // Top-right, clear of AVKit's own screencast/AirPlay control
-            // that lives at the top-left in full-screen playback.
-            HStack(spacing: 4) {
+        // Our controls sit in their own bar above the player rather than
+        // overlaying it. AVKit claims both top corners inside the player's
+        // own bounds — AirPlay at the leading edge, volume/mute at the
+        // trailing edge — so anything overlaid there gets covered whenever
+        // the playback controls fade in. Giving the player a shorter box
+        // moves its chrome down with it. Portrait 9:16 footage is
+        // letterboxed anyway, so the video itself doesn't shrink.
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
                 Spacer()
 
                 // Share sheet — covers Save Video (Photos), Save to Files,
@@ -33,8 +29,8 @@ struct VideoPlayerView: View {
                         .font(.system(size: 30))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.white.opacity(0.85))
-                        .padding(.vertical, 20)
-                        .padding(.leading, 20)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
 
                 Button {
@@ -45,8 +41,21 @@ struct VideoPlayerView: View {
                         .font(.system(size: 30))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.white.opacity(0.85))
-                        .padding([.vertical, .trailing], 20)
-                        .padding(.leading, 8)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Close")
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
+
+            ZStack {
+                if let player {
+                    VideoPlayer(player: player)
+                } else {
+                    Color.black
+                    ProgressView()
+                        .tint(.white)
                 }
             }
         }
