@@ -92,7 +92,7 @@ struct HomeView: View {
             FlowLayout(spacing: 8) {
                 ForEach(topics, id: \.prompt) { topic in
                     TopicChip(topic: topic, status: status[topic.prompt]) {
-                        model.sendMessage(topic.prompt)
+                        model.openTopic(prompt: topic.prompt)
                     }
                 }
                 Button(action: onLoadMore) {

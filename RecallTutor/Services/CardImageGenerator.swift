@@ -45,8 +45,16 @@ final class CardImageGenerator {
                   !generating.contains(index),
                   !failed.contains(index) else { continue }
 
-            generating.insert(index)
             let content = cards[index]
+            // A revisited lecture has its illustrations on disk already; a
+            // paid round trip here would produce different art for the same
+            // card, so the cache is checked before anything is billed.
+            if let cached = CardImageCache.image(forCardContent: content) {
+                images[index] = cached
+                continue
+            }
+
+            generating.insert(index)
             tasks[index] = Task {
                 defer {
                     generating.remove(index)
@@ -56,6 +64,7 @@ final class CardImageGenerator {
                     let image = try await Self.generate(cardContent: content)
                     if !Task.isCancelled {
                         images[index] = image
+                        CardImageCache.store(image, forCardContent: content)
                     }
                 } catch {
                     if !Task.isCancelled {
