@@ -27,8 +27,14 @@ final class ChatModel {
     // Settings
     var readingLevel: ReadingLevel {
         didSet {
+            guard readingLevel != oldValue else { return }
             UserDefaults.standard.set(readingLevel.rawValue, forKey: "recalltutor_reading_level")
+            // The chips on screen were written for the old level, so drop them
+            // and shimmer while the new ones generate rather than showing text
+            // that no longer matches the setting.
             topicLoadTask?.cancel()
+            visibleTopics = [:]
+            isLoadingTopics = true
             topicLoadTask = Task {
                 await loadInitialTopics()
             }
@@ -462,7 +468,11 @@ final class ChatModel {
         if !hasCachedTopics {
             isLoadingTopics = true
         }
-        defer { isLoadingTopics = false }
+        // A superseded load (reading level changed again mid-flight) must not
+        // publish its results or clear the shimmer — the newer task owns both.
+        defer {
+            if !Task.isCancelled { isLoadingTopics = false }
+        }
 
         if hasAPIKey {
             let currentProvider = provider
@@ -502,7 +512,9 @@ final class ChatModel {
             }
         }
 
-        // Fallback: no API key, all AI requests failed, or task cancelled.
+        // Fallback: no API key or all AI requests failed. If we got here by
+        // cancellation, a newer load is already running — leave the screen to it.
+        guard !Task.isCancelled else { return }
         var fallback: [TopicCategory: [Topic]] = [:]
         for category in TopicCategory.allCases {
             fallback[category] = TopicCatalog.pickTopics(
