@@ -138,6 +138,23 @@ final class VoiceTutorManager {
     // explanation, and its remaining chunks would talk over the quiz intro.
     private var suppressAudio = false
 
+    /// Set when Ask interrupts a turn already in progress. Only the OpenAI
+    /// backend can be told to stop generating; Gemini and Firebase keep
+    /// streaming the turn they started, and flushing the player once merely
+    /// clears what had buffered — the narration then carries on audibly
+    /// underneath the student's question.
+    ///
+    /// Scoped to the interrupted turn rather than to "mic is open", because
+    /// Gemini's VAD can decide the question ended and begin *replying* while
+    /// the mic is still open. Dropping that would be fatal: playback never
+    /// starts, so the `onPlaybackStart` auto-close never fires, and the reply
+    /// is discarded with the mic stuck open. Cleared as soon as the backend
+    /// acknowledges the interruption, or when the mic closes.
+    private var droppingInterruptedTurn = false
+
+    /// Whether an arriving tutor chunk should be thrown away rather than played.
+    private var shouldDropTutorAudio: Bool { suppressAudio || droppingInterruptedTurn }
+
     init(topic: String, readingLevel: ReadingLevel, provider: AIProvider) {
         self.topic = topic
         self.readingLevel = readingLevel
@@ -225,7 +242,7 @@ final class VoiceTutorManager {
                 }
             },
             onAudioChunk: { [weak self] base64 in
-                guard let self, !self.suppressAudio else { return }
+                guard let self, !self.shouldDropTutorAudio else { return }
                 // Scheduling into a zero-volume player would let the turn play
                 // itself out inaudibly; drop it and remember to re-prompt.
                 guard !self.isMuted else {
@@ -237,6 +254,7 @@ final class VoiceTutorManager {
             onTextChunk: nil,
             onTurnComplete: nil,
             onInterrupted: { [weak self] in
+                self?.droppingInterruptedTurn = false
                 self?.player?.flush()
             },
             onError: { [weak self] message in
@@ -265,12 +283,13 @@ final class VoiceTutorManager {
                 }
             },
             onAudioChunk: { [weak self] base64 in
-                guard let self, !self.suppressAudio else { return }
+                guard let self, !self.shouldDropTutorAudio else { return }
                 self.player?.playChunk(base64)
             },
             onTextChunk: nil,
             onTurnComplete: nil,
             onInterrupted: { [weak self] in
+                self?.droppingInterruptedTurn = false
                 self?.player?.flush()
             },
             onError: { [weak self] message in
@@ -306,7 +325,7 @@ final class VoiceTutorManager {
             }
         }
         fbBackend.onAudioChunk = { [weak self] data in
-            guard let self, !self.suppressAudio else { return }
+            guard let self, !self.shouldDropTutorAudio else { return }
             guard !self.isMuted else {
                 self.missedAudioWhileMuted = true
                 return
@@ -321,6 +340,7 @@ final class VoiceTutorManager {
             if !self.isMuted { self.isSpeaking = true }
         }
         fbBackend.onInterrupted = { [weak self] in
+            self?.droppingInterruptedTurn = false
             self?.player?.flush()
         }
         fbBackend.onError = { [weak self] message in
@@ -574,6 +594,10 @@ final class VoiceTutorManager {
                     // This has to happen *before* capture starts: chunks
                     // appended ahead of the buffer clear would be wiped, and
                     // the tail of the narration would land in the question.
+                    // Only a turn that is actually mid-flight needs muzzling.
+                    // Arming this when the tutor is already silent would drop
+                    // the answer to the question being asked.
+                    self.droppingInterruptedTurn = self.isSpeaking
                     self.player?.flush()
                     self.backendBeginQuestion()
                     self.player?.ducked = true
@@ -603,5 +627,8 @@ final class VoiceTutorManager {
         recorder = nil
         isMicOpen = false
         player?.ducked = false
+        // Backstop: a backend that never acknowledged the interruption must
+        // not leave the answer muted once the student has finished asking.
+        droppingInterruptedTurn = false
     }
 }
