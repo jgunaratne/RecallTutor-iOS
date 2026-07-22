@@ -435,9 +435,9 @@ final class VoiceTutorManager {
         }
     }
 
-    private func backendInterruptResponse() {
+    private func backendBeginQuestion() {
         if activeBackend == .openAIWebSocket {
-            openAISession?.cancelResponse()
+            openAISession?.beginQuestion()
         }
     }
 
@@ -551,7 +551,12 @@ final class VoiceTutorManager {
     func toggleMic() {
         guard status == .connected else { return }
         if isMicOpen {
+            // OpenAI rejects a commit holding under 100ms of audio, so a
+            // double-tap on Ask would otherwise raise an error for a turn
+            // that has nothing in it anyway.
+            let captured = Date().timeIntervalSince(micOpenedAt)
             closeMic()
+            guard captured > 0.2 else { return }
             // Commit the user's turn — without this, VAD waits forever for
             // trailing silence that never arrives once the stream stops.
             backendSendAudioStreamEnd()
@@ -563,6 +568,16 @@ final class VoiceTutorManager {
                 }
                 guard let self, self.status == .connected else { return }
                 do {
+                    // Opening the mic is an explicit "my turn" — stop the
+                    // tutor's speech so it isn't talking into the open mic,
+                    // and duck any reply audio while the mic stays open.
+                    // This has to happen *before* capture starts: chunks
+                    // appended ahead of the buffer clear would be wiped, and
+                    // the tail of the narration would land in the question.
+                    self.player?.flush()
+                    self.backendBeginQuestion()
+                    self.player?.ducked = true
+
                     let recorder = LiveAudioRecorder(sampleRate: self.activeBackend == .openAIWebSocket ? 24_000 : 16_000)
                     try recorder.start { [weak self] base64 in
                         Task { @MainActor in
@@ -573,13 +588,10 @@ final class VoiceTutorManager {
                     self.errorMessage = nil
                     self.isMicOpen = true
                     self.micOpenedAt = Date()
-                    // Opening the mic is an explicit "my turn" — stop the
-                    // tutor's speech so it isn't talking into the open mic,
-                    // and duck any reply audio while the mic stays open.
-                    self.player?.flush()
-                    self.backendInterruptResponse()
-                    self.player?.ducked = true
                 } catch {
+                    // Capture never opened, so undo the ducking the turn
+                    // setup applied — otherwise replies stay quiet for good.
+                    self.player?.ducked = false
                     self.errorMessage = error.localizedDescription
                 }
             }

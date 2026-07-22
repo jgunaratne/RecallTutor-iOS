@@ -116,17 +116,36 @@ final class OpenAIRealtimeSession {
             // server confirms cancellation.
             pendingResponse = .text(text)
             cancelActiveResponse()
-            send(["type": "output_audio_buffer.clear"])
             return
         }
         startTextResponse(text)
     }
 
+    // Note: no `output_audio_buffer.clear` anywhere below. Those events are
+    // WebRTC-only — the server buffers audio on the media track there, so the
+    // client asks it to drop what it queued. This session is a raw WebSocket:
+    // audio arrives as `response.output_audio.delta` and the client owns the
+    // buffer outright, so the server rejects the event with "Invalid value".
+    // Stopping playback is `LiveAudioPlayer.flush()`, which the caller does.
+
     func cancelResponse() {
         guard status == .connected else { return }
         pendingResponse = nil
         cancelActiveResponse()
-        send(["type": "output_audio_buffer.clear"])
+    }
+
+    /// Open an explicit push-to-talk turn: interrupt the narration and drop
+    /// any audio still sitting in the input buffer.
+    ///
+    /// The clear is the important half. Turn detection is disabled (see
+    /// `connect`), so the server never resets the input buffer on its own —
+    /// residue from an earlier turn stays there and gets prepended to the
+    /// next `commit`, making the tutor answer a question the student never
+    /// finished asking. Must run *before* capture starts.
+    func beginQuestion() {
+        guard status == .connected else { return }
+        send(["type": "input_audio_buffer.clear"])
+        cancelResponse()
     }
 
     func disconnect() {
@@ -205,22 +224,50 @@ final class OpenAIRealtimeSession {
             responseActive = false
             responseCancellationPending = false
             callbacks.onTurnComplete?()
-            let pending = pendingResponse
-            pendingResponse = nil
-            if let pending {
-                switch pending {
-                case .text(let text): startTextResponse(text)
-                case .audio: startAudioResponse()
-                }
-            }
+            flushPendingResponse()
         case "input_audio_buffer.speech_started", "response.output_audio_buffer.cleared":
             callbacks.onInterrupted?()
         case "error":
-            let message = (json["error"] as? [String: Any])?["message"] as? String
-            handleError(message ?? "OpenAI Realtime error")
+            handleServerError(json["error"] as? [String: Any])
         default:
             break
         }
+    }
+
+    private func flushPendingResponse() {
+        let pending = pendingResponse
+        pendingResponse = nil
+        guard let pending else { return }
+        switch pending {
+        case .text(let text): startTextResponse(text)
+        case .audio: startAudioResponse()
+        }
+    }
+
+    /// An `error` event never means the session is dead.
+    ///
+    /// OpenAI closes the socket itself for genuinely fatal problems (bad key,
+    /// expired session) and `runReceiveLoop`'s catch reports that. Marking the
+    /// session `.error` here as well meant one routine complaint — most often
+    /// an empty-buffer commit from a quick Ask tap — tore down a perfectly
+    /// live connection and told the student "Connection dropped — ask again."
+    private func handleServerError(_ error: [String: Any]?) {
+        let code = error?["code"] as? String
+
+        // The optimistic `responseActive` flag can disagree with the server.
+        // Resync, or `responseCancellationPending` latches on and blocks every
+        // later cancel while a queued turn waits for a `response.done` that is
+        // never coming.
+        if code == "response_cancel_not_active" {
+            responseActive = false
+            responseCancellationPending = false
+            flushPendingResponse()
+            return
+        }
+        // Expected whenever a turn is committed with no speech in it.
+        if code == "input_audio_buffer_commit_empty" { return }
+
+        callbacks.onError?((error?["message"] as? String) ?? "OpenAI Realtime error")
     }
 
     private func handleError(_ message: String) {
