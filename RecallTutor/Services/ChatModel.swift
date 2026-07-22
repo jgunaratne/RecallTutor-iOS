@@ -34,21 +34,15 @@ final class ChatModel {
             }
         }
     }
+    /// The provider the user explicitly selected in Settings. Governs text,
+    /// realtime audio, and illustrations together.
     var provider: AIProvider {
         didSet {
-            // An OpenAI key is an app-wide provider choice, not merely an
-            // optional entry in the picker: it governs text, realtime audio,
-            // and illustrations together.
-            if provider != .openai, Keychain.loadKey(.openai) != nil {
-                provider = .openai
-            } else {
-                UserDefaults.standard.set(provider.rawValue, forKey: "recalltutor_provider")
-            }
+            UserDefaults.standard.set(provider.rawValue, forKey: "recalltutor_provider")
         }
     }
     var availableProviders: [AIProvider] = []
     var hasAPIKey: Bool { !availableProviders.isEmpty }
-    var hasOpenAIKey: Bool { Keychain.loadKey(.openai) != nil }
 
     /// Presents the Google sign-in sheet (required for the built-in tier).
     var showSignIn = false
@@ -139,29 +133,26 @@ final class ChatModel {
 
     // MARK: - Settings
 
-    func saveKeys(anthropic: String, gemini: String, openai: String) {
+    /// Persist the keys, then apply the provider the user picked alongside
+    /// them. `selected` is honored only if it actually has a key (or is the
+    /// built-in tier) after saving — otherwise `refreshProviders()` falls back.
+    func saveKeys(anthropic: String, gemini: String, openai: String, selected: AIProvider? = nil) {
         Keychain.saveKey(anthropic, account: .anthropic)
         Keychain.saveKey(gemini, account: .gemini)
         Keychain.saveKey(openai, account: .openai)
+        if let selected {
+            provider = selected
+        }
         refreshProviders()
     }
 
-    /// Recompute which providers have keys. A supplied OpenAI key opts the
-    /// entire tutor into OpenAI for text, realtime audio, and illustrations;
-    /// without one, retain the existing Gemini/Firebase selection behavior.
+    /// Recompute which providers have keys, keeping the user's explicit
+    /// choice unless its key was removed — no provider auto-wins here; the
+    /// Settings checkboxes are the only thing that picks one.
     private func refreshProviders() {
         availableProviders = AIService.availableProviders()
-        if Keychain.loadKey(.openai) != nil {
-            provider = .openai
-            return
-        }
         if !availableProviders.contains(provider) {
             provider = availableProviders.contains(.anthropic) ? .anthropic : (availableProviders.first ?? .anthropic)
-        }
-        // A personal Gemini key always beats the metered Firebase tier —
-        // never stay on Firebase once a key is available.
-        if provider == .firebase, availableProviders.contains(.gemini) {
-            provider = .gemini
         }
     }
 
