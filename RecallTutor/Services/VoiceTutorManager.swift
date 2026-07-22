@@ -1,13 +1,15 @@
 import Foundation
 import Observation
 
-/// Orchestrates one Gemini Live voice-tutor session for the current lecture —
-/// the iOS counterpart of components/GeminiLiveOverlay.tsx. Owns the session,
+/// Orchestrates one realtime voice-tutor session for the current lecture —
+/// the iOS counterpart of the web app's voice overlays. Owns the session,
 /// mic recorder, and player; feeds cards and quiz events into the model.
 ///
-/// Supports two backends (mirroring podchat's VoiceModeViewModel):
+/// Supports three backends (mirroring podchat's VoiceModeViewModel):
 /// - **Raw WebSocket** (`GeminiLiveSession`): when the user has a Gemini API
 ///   key, connects directly to `gemini-3.1-flash-live-preview`.
+/// - **OpenAI Realtime** (`OpenAIRealtimeSession`): when OpenAI is selected
+///   or it is the only personal voice key, connects to `gpt-realtime-2.1`.
 /// - **Firebase AI SDK** (`FirebaseLiveBackend`): when no key is configured,
 ///   uses Firebase AI's native Live API with `gemini-2.5-flash-native-audio`
 ///   — no API key required, Firebase handles auth via GoogleService-Info.plist.
@@ -16,6 +18,7 @@ import Observation
 final class VoiceTutorManager {
     let topic: String
     let readingLevel: ReadingLevel
+    private let preferredProvider: AIProvider
     // Chosen once per lecture so reconnects keep the same voice.
     private let sessionVoice: String
 
@@ -75,19 +78,21 @@ final class VoiceTutorManager {
 
     /// Which backend is currently active.
     enum LiveBackend {
-        case websocket  // Raw WebSocket → gemini-3.1-flash-live-preview
+        case geminiWebSocket
+        case openAIWebSocket
         case firebase   // Firebase AI SDK → gemini-2.5-flash-native-audio
     }
 
     /// The currently active backend (nil when disconnected).
     private(set) var activeBackend: LiveBackend?
 
-    /// Whether the user has a Gemini API key configured.
-    private var hasAPIKey: Bool { Keychain.loadKey(.gemini) != nil }
+    private var hasGeminiAPIKey: Bool { Keychain.loadKey(.gemini) != nil }
+    private var hasOpenAIAPIKey: Bool { Keychain.loadKey(.openai) != nil }
 
     // MARK: - Services
 
     private var session: GeminiLiveSession?
+    private var openAISession: OpenAIRealtimeSession?
     private let fbBackend = FirebaseLiveBackend()
     private var recorder: LiveAudioRecorder?
     private var player: LiveAudioPlayer?
@@ -133,9 +138,10 @@ final class VoiceTutorManager {
     // explanation, and its remaining chunks would talk over the quiz intro.
     private var suppressAudio = false
 
-    init(topic: String, readingLevel: ReadingLevel) {
+    init(topic: String, readingLevel: ReadingLevel, provider: AIProvider) {
         self.topic = topic
         self.readingLevel = readingLevel
+        self.preferredProvider = provider
         self.sessionVoice = LiveTutorPrompts.voice(topic: topic, level: readingLevel)
     }
 
@@ -150,6 +156,8 @@ final class VoiceTutorManager {
         // whose callbacks still write into this manager.
         session?.disconnect()
         session = nil
+        openAISession?.disconnect()
+        openAISession = nil
         fbBackend.disconnect()
         closeMic()
         player?.stop()
@@ -158,17 +166,14 @@ final class VoiceTutorManager {
 
         let player = LiveAudioPlayer()
         player.muted = isMuted
-        // The 1.5x makeup gain was tuned for the WebSocket model's voice
-        // output; Firebase's native-audio model is louder and clips at that
-        // gain (audible as raspy/distorted), so it gets no boost.
-        player.gain = hasAPIKey ? 1.5 : 1.0
+        // Gemini's raw WebSocket voice benefits from a small makeup gain.
+        // OpenAI Realtime and Firebase output are already normalized.
+        player.gain = hasGeminiAPIKey && preferredProvider != .openai ? 1.5 : 1.0
         player.onPlaybackStart = { [weak self] in
             guard let self else { return }
             if self.isMicOpen, Date().timeIntervalSince(self.micOpenedAt) > 1.0 {
                 self.closeMic()
-                if self.activeBackend == .websocket {
-                    self.session?.sendAudioStreamEnd()
-                }
+                self.backendSendAudioStreamEnd()
             }
             if !self.isMuted { self.isSpeaking = true }
         }
@@ -179,15 +184,21 @@ final class VoiceTutorManager {
 
         let systemInstr = LiveTutorPrompts.buildSystemInstruction(topic: topic, level: readingLevel)
 
-        if hasAPIKey {
+        if preferredProvider == .openai, hasOpenAIAPIKey {
+            activeBackend = .openAIWebSocket
+            connectOpenAI(systemInstruction: systemInstr)
+        } else if hasGeminiAPIKey {
             // Use raw WebSocket → gemini-3.1-flash-live-preview (best quality).
-            activeBackend = .websocket
+            activeBackend = .geminiWebSocket
             connectWebSocket(systemInstruction: systemInstr)
+        } else if hasOpenAIAPIKey {
+            activeBackend = .openAIWebSocket
+            connectOpenAI(systemInstruction: systemInstr)
         } else {
             // No API key → use Firebase AI SDK tier.
             // Requires sign-in (Firebase is account-bound).
             guard AuthManager.shared.isSignedIn else {
-                errorMessage = "Sign in to use the voice tutor, or add a Gemini API key in Settings."
+                errorMessage = "Sign in to use the voice tutor, or add a Gemini or OpenAI API key in Settings."
                 return
             }
             guard FirebaseAIClient.isAvailable else {
@@ -240,6 +251,43 @@ final class VoiceTutorManager {
             systemInstruction: systemInstruction,
             voice: sessionVoice
         )
+    }
+
+    private func connectOpenAI(systemInstruction: String) {
+        let session = OpenAIRealtimeSession(callbacks: OpenAIRealtimeCallbacks(
+            onStatusChange: { [weak self] status in
+                guard let self else { return }
+                self.status = status
+                if status == .error { self.isSpeaking = false }
+                if status != .connected {
+                    if self.isMicOpen { self.errorMessage = "Connection dropped — ask again" }
+                    self.closeMic()
+                }
+            },
+            onAudioChunk: { [weak self] base64 in
+                guard let self, !self.suppressAudio else { return }
+                self.player?.playChunk(base64)
+            },
+            onTextChunk: nil,
+            onTurnComplete: nil,
+            onInterrupted: { [weak self] in
+                self?.player?.flush()
+            },
+            onError: { [weak self] message in
+                self?.errorMessage = message
+            }
+        ))
+        self.openAISession = session
+
+        hasKickedOff = false
+        sentCards.removeAll()
+        readCards.removeAll()
+        lastSpokenCard = nil
+        sentQuiz = nil
+        sentAnswer = nil
+        sentQuizResult = nil
+
+        session.connect(instructions: systemInstruction, voice: "marin")
     }
 
     private func connectFirebase(systemInstruction: String) {
@@ -321,6 +369,8 @@ final class VoiceTutorManager {
     func disconnect() {
         session?.disconnect()
         session = nil
+        openAISession?.disconnect()
+        openAISession = nil
         fbBackend.disconnect()
         activeBackend = nil
         closeMic()
@@ -350,8 +400,9 @@ final class VoiceTutorManager {
     /// Send context (no model response) to whichever backend is active.
     private func backendSendContext(_ text: String) {
         switch activeBackend {
-        case .websocket: session?.sendContext(text)
-        case .firebase:  fbBackend.sendContext(text)
+        case .geminiWebSocket: session?.sendContext(text)
+        case .openAIWebSocket: openAISession?.sendContext(text)
+        case .firebase: fbBackend.sendContext(text)
         case nil: break
         }
     }
@@ -359,8 +410,9 @@ final class VoiceTutorManager {
     /// Send text that triggers a model response to whichever backend is active.
     private func backendSendText(_ text: String) {
         switch activeBackend {
-        case .websocket: session?.sendText(text)
-        case .firebase:  fbBackend.sendText(text)
+        case .geminiWebSocket: session?.sendText(text)
+        case .openAIWebSocket: openAISession?.sendText(text)
+        case .firebase: fbBackend.sendText(text)
         case nil: break
         }
     }
@@ -368,9 +420,24 @@ final class VoiceTutorManager {
     /// Send audio to whichever backend is active.
     private func backendSendAudio(_ base64: String) {
         switch activeBackend {
-        case .websocket: session?.sendAudio(base64)
-        case .firebase:  fbBackend.sendAudio(base64Data: base64)
+        case .geminiWebSocket: session?.sendAudio(base64)
+        case .openAIWebSocket: openAISession?.sendAudio(base64)
+        case .firebase: fbBackend.sendAudio(base64Data: base64)
         case nil: break
+        }
+    }
+
+    private func backendSendAudioStreamEnd() {
+        switch activeBackend {
+        case .geminiWebSocket: session?.sendAudioStreamEnd()
+        case .openAIWebSocket: openAISession?.sendAudioStreamEnd()
+        case .firebase, nil: break
+        }
+    }
+
+    private func backendInterruptResponse() {
+        if activeBackend == .openAIWebSocket {
+            openAISession?.cancelResponse()
         }
     }
 
@@ -487,9 +554,7 @@ final class VoiceTutorManager {
             closeMic()
             // Commit the user's turn — without this, VAD waits forever for
             // trailing silence that never arrives once the stream stops.
-            if activeBackend == .websocket {
-                session?.sendAudioStreamEnd()
-            }
+            backendSendAudioStreamEnd()
         } else {
             Task { [weak self] in
                 guard await LiveAudioRecorder.requestPermission() else {
@@ -498,7 +563,7 @@ final class VoiceTutorManager {
                 }
                 guard let self, self.status == .connected else { return }
                 do {
-                    let recorder = LiveAudioRecorder()
+                    let recorder = LiveAudioRecorder(sampleRate: self.activeBackend == .openAIWebSocket ? 24_000 : 16_000)
                     try recorder.start { [weak self] base64 in
                         Task { @MainActor in
                             self?.backendSendAudio(base64)
@@ -512,6 +577,7 @@ final class VoiceTutorManager {
                     // tutor's speech so it isn't talking into the open mic,
                     // and duck any reply audio while the mic stays open.
                     self.player?.flush()
+                    self.backendInterruptResponse()
                     self.player?.ducked = true
                 } catch {
                     self.errorMessage = error.localizedDescription

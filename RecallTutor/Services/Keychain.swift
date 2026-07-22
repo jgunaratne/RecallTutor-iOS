@@ -8,6 +8,7 @@ enum Keychain {
     enum Account: String {
         case anthropic = "anthropic-api-key"
         case gemini = "gemini-api-key"
+        case openai = "openai-api-key"
     }
 
     static func loadKey(_ account: Account) -> String? {

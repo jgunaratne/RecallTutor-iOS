@@ -2,15 +2,13 @@ import Foundation
 import Observation
 import UIKit
 
-/// Generates illustrative images for lecture cards using Gemini's
-/// Nano Banana image models. Manages an in-memory cache so images
-/// survive card-swipe navigation within a single lecture session.
+/// Generates illustrative images for lecture cards. Manages an in-memory
+/// cache so images survive card-swipe navigation within a single lecture
+/// session.
 ///
-/// Two backends (same selection rule as VoiceTutorManager):
-/// - **Interactions API** (raw REST, gemini-3.1-flash-image): when the
-///   user has a personal Gemini API key.
-/// - **Firebase AI SDK** (gemini-2.5-flash-image): when no key is
-///   configured — signed-in users on the built-in tier get images too.
+/// Backends are selected by credential, with the same precedence as the web
+/// app: OpenAI's Image API when an OpenAI key exists, then the personal Gemini
+/// key, then Firebase AI for the signed-in built-in tier.
 ///
 /// Usage: create one instance per lecture, call `generateImages(for:)`
 /// once streaming finishes, and query `images[cardIndex]` to render.
@@ -35,9 +33,10 @@ final class CardImageGenerator {
     /// Kick off image generation for eligible cards. Safe to call
     /// repeatedly — already-cached or in-flight indices are skipped.
     func generateImages(for cards: [String]) {
-        // Personal key → raw Interactions API; otherwise the Firebase AI
-        // tier can generate too, but it's account-bound (needs sign-in).
-        let canGenerate = Keychain.loadKey(.gemini) != nil
+        // A personal OpenAI or Gemini key uses its direct API; otherwise the
+        // Firebase AI tier can generate too, but it is account-bound.
+        let canGenerate = Keychain.loadKey(.openai) != nil
+            || Keychain.loadKey(.gemini) != nil
             || (FirebaseAIClient.isAvailable && AuthManager.shared.isSignedIn)
         guard canGenerate else { return }
         let eligible = Self.imageIndices(for: cards)
@@ -94,11 +93,21 @@ final class CardImageGenerator {
 
     /// Route to whichever image backend the user's setup supports.
     private static func generate(cardContent: String) async throws -> UIImage {
+        let prompt = illustrationPrompt(for: cardContent)
+        // Do not silently charge Gemini or Firebase after an OpenAI failure:
+        // an entered OpenAI key explicitly opts the lecture into OpenAI's
+        // content, audio, and image services.
+        if Keychain.loadKey(.openai) != nil {
+            guard let image = UIImage(data: try await OpenAIClient.generateImage(prompt: prompt)) else {
+                throw ImageGenError.noImage
+            }
+            return image
+        }
         if Keychain.loadKey(.gemini) != nil {
             return try await callImageGen(cardContent: cardContent)
         }
         return try await FirebaseAIClient.generateCardImage(
-            prompt: illustrationPrompt(for: cardContent)
+            prompt: prompt
         )
     }
 

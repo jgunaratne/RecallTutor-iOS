@@ -69,6 +69,7 @@ struct ChatView: View {
         .onAppear {
             let hasPersonalKey = model.availableProviders.contains(.anthropic)
                 || model.availableProviders.contains(.gemini)
+                || model.availableProviders.contains(.openai)
             if !model.hasAPIKey {
                 // No key and no Firebase config — Settings is the only path.
                 showSettings = true
