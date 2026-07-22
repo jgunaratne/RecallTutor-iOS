@@ -164,8 +164,38 @@ struct ChatView: View {
                 )
                 // Reset the pager per exchange, not per streamed chunk.
                 .id("\(model.activeId?.uuidString ?? "draft")-\(model.messages.count)")
+            } else {
+                unfinishedLecture
             }
         }
+        // Without this the stack shrinks to its content, and a conversation
+        // with nothing to render leaves the header floating mid-screen.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// A conversation whose reply never arrived. The user's turn is recorded
+    /// before the assistant's, so a lecture abandoned or failed mid-stream
+    /// persists with no content to show — offer to finish it rather than
+    /// rendering a blank page.
+    private var unfinishedLecture: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "text.page.slash")
+                .font(.system(size: 32))
+                .foregroundStyle(Theme.textTertiary)
+            Text("This lecture didn't finish generating.")
+                .font(.appBody(size: 16))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+            Button("Generate it now") {
+                model.resumeUnfinishedLecture()
+            }
+            .font(.appBody(size: 16, weight: .medium))
+            .foregroundStyle(Theme.accent)
+            .disabled(model.isStreaming)
+            Spacer()
+        }
+        .padding(.horizontal, 32)
     }
 
     // MARK: - Sidebar overlay

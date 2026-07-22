@@ -372,6 +372,58 @@ final class ChatModel {
         retrySnapshot = nil
     }
 
+    /// The prompt that opened the lecture on screen — its topic identity.
+    var currentTopicPrompt: String? {
+        messages.first { $0.role == .user }?.content
+    }
+
+    /// The stored lecture for a topic prompt, if the student already has one.
+    /// Matched on the opening user message, the same key `topicStatus` uses to
+    /// mark a chip explored — so anything showing as visited can be reopened.
+    func cachedConversation(forPrompt prompt: String) -> Conversation? {
+        conversations.first { conv in
+            conv.messages.first(where: { $0.role == .user })?.content == prompt
+                // A conversation whose reply never arrived is worth nothing to
+                // resume; fall through and generate it properly.
+                && conv.messages.contains { $0.role == .assistant && !$0.content.isEmpty }
+        }
+    }
+
+    /// Open a topic: resume the stored lecture when there is one, otherwise
+    /// generate it. Revisiting a topic shouldn't re-bill the student for
+    /// content and illustrations they already have.
+    func openTopic(prompt: String) {
+        if let existing = cachedConversation(forPrompt: prompt) {
+            selectConversation(existing)
+        } else {
+            sendMessage(prompt)
+        }
+    }
+
+    /// Generate a fresh lecture on a topic that already has one.
+    ///
+    /// The existing lecture is deliberately left in history rather than
+    /// deleted first: a regeneration that fails or gets abandoned would
+    /// otherwise destroy good content and leave a contentless stub in its
+    /// place. `cachedConversation` resolves to the newest match, so the fresh
+    /// lecture is what a later visit resumes.
+    func regenerateTopic(prompt: String) {
+        guard !isStreaming else { return }
+        messages = []
+        activeId = nil
+        sendMessage(prompt)
+    }
+
+    /// Stream the missing reply for a stored conversation whose lecture never
+    /// finished. `sendMessage` persists the user's turn immediately, so an
+    /// interrupted exchange survives as a user-only conversation.
+    func resumeUnfinishedLecture() {
+        guard !isStreaming, let activeId,
+              messages.contains(where: { $0.role == .user }) else { return }
+        let base = messages.filter { !($0.role == .assistant && $0.content.isEmpty) }
+        runExchange(base, convId: activeId)
+    }
+
     func selectConversation(_ conversation: Conversation) {
         guard !isStreaming else { return }
         tearDownVoiceTutor()

@@ -12,6 +12,7 @@ struct LectureView: View {
     @Environment(ChatModel.self) private var model
     @State private var currentIndex = 0
     @State private var imageGenerator = CardImageGenerator()
+    @State private var showRegenerateConfirm = false
 
     // Video generation
     @State private var videoStatus: VideoService.Status?
@@ -32,6 +33,38 @@ struct LectureView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.surface.ignoresSafeArea(edges: .bottom))
+    }
+
+    // MARK: - Regenerate
+
+    /// Revisiting a topic now resumes the stored lecture, so this is the only
+    /// way back to freshly generated content. Hidden while streaming — there
+    /// is nothing settled to replace yet.
+    @ViewBuilder
+    private var regenerateButton: some View {
+        if !isStreaming, let prompt = model.currentTopicPrompt {
+            Button {
+                showRegenerateConfirm = true
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Regenerate lecture")
+            .confirmationDialog(
+                "Generate a new lecture on this topic?",
+                isPresented: $showRegenerateConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Regenerate", role: .destructive) {
+                    model.regenerateTopic(prompt: prompt)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The current lecture stays in your history.")
+            }
+        }
     }
 
     // MARK: - Pager
@@ -65,6 +98,7 @@ struct LectureView: View {
                         .monospacedDigit()
                         .foregroundStyle(Theme.textTertiary)
                 }
+                regenerateButton
             }
             .padding(.horizontal, 20)
             .padding(.top, 14)
