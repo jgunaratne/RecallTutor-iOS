@@ -252,11 +252,16 @@ struct OpenAIClient {
         "properties": [
             "topics": [
                 "type": "array",
+                "description": "A list of 5 topics generated for the user.",
                 "items": [
                     "type": "object",
                     "properties": [
-                        "label": ["type": "string"],
-                        "prompt": ["type": "string"],
+                        // The descriptions are load-bearing, not documentation:
+                        // the shared topic prompt never constrains label length,
+                        // so "max 3 words" here is the only thing keeping chip
+                        // labels short enough to fit the home grid.
+                        "label": ["type": "string", "description": "Short label, max 3 words"],
+                        "prompt": ["type": "string", "description": "The exact prompt/question to ask the tutor"],
                     ],
                     "required": ["label", "prompt"],
                     "additionalProperties": false,
