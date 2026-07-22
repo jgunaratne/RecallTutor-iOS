@@ -65,9 +65,9 @@ enum VideoService {
 
         var label: String {
             switch self {
-            case .thirtySeconds: "30 seconds"
-            case .oneMinute: "1 minute"
-            case .threeMinutes: "3 minutes"
+            case .thirtySeconds: "30 second video"
+            case .oneMinute: "1 minute video"
+            case .threeMinutes: "3 minute video"
             }
         }
 
@@ -104,6 +104,9 @@ enum VideoService {
     fileprivate static let segmentDuration = 8  // seconds (Veo max)
     private static let pollInterval: TimeInterval = 15
     private static let maxPollsPerSegment = 40  // 10 min max per segment
+    /// Ceiling on simultaneous Veo jobs in fast mode — enough to cut the
+    /// wall clock substantially without tripping per-project rate limits.
+    private static let maxConcurrentSegments = 3
 
     // MARK: - Main entry point
 
@@ -113,12 +116,15 @@ enum VideoService {
     ///   - cards: The lecture card text array (from CardSplitter).
     ///   - length: Requested clip length (drives segment count + narration).
     ///   - referenceImage: The card illustration to seed the first segment (optional).
+    ///   - fastGeneration: Skip frame chaining and render scenes concurrently.
+    ///     Much quicker, but scenes no longer flow into one another.
     ///   - onStatus: Progress callback (fires on MainActor).
     /// - Returns: Local file URL of the final .mp4 with voiceover.
     static func generateFullVideo(
         cards: [String],
         length: ClipLength,
         referenceImage: UIImage? = nil,
+        fastGeneration: Bool = false,
         onStatus: @MainActor @Sendable @escaping (Status) -> Void
     ) async throws -> URL {
         guard let apiKey = Keychain.loadKey(.gemini) else {
@@ -132,7 +138,7 @@ enum VideoService {
         defer { bgTask.end() }
 
         // Same lecture + length → same video; serve the cached render instantly.
-        let cachedURL = cacheURL(for: cards, length: length)
+        let cachedURL = cacheURL(for: cards, length: length, fastGeneration: fastGeneration)
         if FileManager.default.fileExists(atPath: cachedURL.path) {
             print("[VideoService] Cache hit: \(cachedURL.lastPathComponent)")
             await onStatus(.complete)
@@ -158,53 +164,27 @@ enum VideoService {
             await onStatus(.preparingScript)
             let script = try await generateScript(cards: cards, length: length, apiKey: apiKey)
 
-            // ── Step 2: Generate Veo segments with frame chaining ──────────
-            var segmentURLs: [URL] = []
-            var seedImage = referenceImage
-
-            for i in 0..<min(script.scenes.count, length.segmentCount) {
-                try Task.checkCancellation()
-
-                let scenePrompt = script.scenes[i].prompt
-                let segmentURL: URL
-                do {
-                    segmentURL = try await generateSingleSegment(
-                        prompt: scenePrompt,
-                        referenceImage: seedImage,
-                        segmentIndex: i,
+            // ── Step 2: Generate the Veo segments ──────────────────────────
+            let scenes = Array(script.scenes.prefix(length.segmentCount))
+            let segmentURLs = try await (
+                fastGeneration
+                    ? generateSegmentsConcurrently(
+                        scenes: scenes,
+                        referenceImage: referenceImage,
                         totalSegments: length.segmentCount,
                         outputDir: tempDir,
                         apiKey: apiKey,
                         onStatus: onStatus
                     )
-                } catch VideoError.filtered(let reason) {
-                    // Don't let one filtered scene sink the whole run —
-                    // retry once with a deliberately safe abstract prompt.
-                    print("[VideoService] Segment \(i + 1) filtered (\(reason)); retrying with sanitized prompt")
-                    segmentURL = try await generateSingleSegment(
-                        prompt: """
-                        A slow cinematic camera drift through an abstract, softly lit \
-                        landscape of light, color, and gentle shapes, evoking a calm \
-                        documentary mood. Ambient sound only. No people, no text, no dialogue.
-                        """,
-                        referenceImage: seedImage,
-                        segmentIndex: i,
+                    : generateSegmentsChained(
+                        scenes: scenes,
+                        referenceImage: referenceImage,
                         totalSegments: length.segmentCount,
                         outputDir: tempDir,
                         apiKey: apiKey,
                         onStatus: onStatus
                     )
-                }
-                segmentURLs.append(segmentURL)
-
-                // Extract last frame for chaining to next segment
-                if i < length.segmentCount - 1 {
-                    seedImage = try? await extractLastFrame(from: segmentURL)
-                    if seedImage == nil {
-                        print("[VideoService] Warning: couldn't extract last frame for segment \(i), next segment won't be chained")
-                    }
-                }
-            }
+            )
 
             try Task.checkCancellation()
 
@@ -274,20 +254,33 @@ enum VideoService {
     // MARK: - Cache
 
     /// Whether a finished video for this lecture + length is already cached.
-    static func hasCachedVideo(for cards: [String], length: ClipLength) -> Bool {
-        FileManager.default.fileExists(atPath: cacheURL(for: cards, length: length).path)
+    static func hasCachedVideo(
+        for cards: [String],
+        length: ClipLength,
+        fastGeneration: Bool = false
+    ) -> Bool {
+        FileManager.default.fileExists(
+            atPath: cacheURL(for: cards, length: length, fastGeneration: fastGeneration).path
+        )
     }
 
-    /// Stable per-lecture cache location, keyed by a hash of the card text
-    /// and the clip length (a 30 s and a 3 min render coexist).
+    /// Stable per-lecture cache location, keyed by a hash of the card text,
+    /// the clip length, and the generation mode (a 30 s and a 3 min render
+    /// coexist, as do the chained and fast renders of the same lecture —
+    /// they look different, so they must not share a file).
     /// Lives in Caches so the system can reclaim it under storage pressure.
-    private static func cacheURL(for cards: [String], length: ClipLength) -> URL {
+    private static func cacheURL(
+        for cards: [String],
+        length: ClipLength,
+        fastGeneration: Bool
+    ) -> URL {
         let digest = SHA256.hash(data: Data(cards.joined(separator: "\n").utf8))
         let hash = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("LectureVideos", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("lecture_\(hash)_\(length.seconds)s.mp4")
+        let suffix = fastGeneration ? "_fast" : ""
+        return dir.appendingPathComponent("lecture_\(hash)_\(length.seconds)s\(suffix).mp4")
     }
 
     // MARK: - Step 1: Script generation
@@ -383,30 +376,206 @@ enum VideoService {
         return script
     }
 
-    // MARK: - Step 2: Single Veo segment generation
+    // MARK: - Step 2: Segment generation strategies
+
+    /// Default path: each segment is seeded with the last frame of the one
+    /// before it, so the scenes flow into one another. Necessarily serial.
+    private static func generateSegmentsChained(
+        scenes: [VideoScript.Scene],
+        referenceImage: UIImage?,
+        totalSegments: Int,
+        outputDir: URL,
+        apiKey: String,
+        onStatus: @MainActor @Sendable @escaping (Status) -> Void
+    ) async throws -> [URL] {
+        var segmentURLs: [URL] = []
+        var seedJPEG = referenceImage?.jpegData(compressionQuality: 0.85)
+
+        for (i, scene) in scenes.enumerated() {
+            try Task.checkCancellation()
+
+            let segmentURL = try await generateSegmentWithSafeRetry(
+                prompt: scene.prompt,
+                referenceJPEG: seedJPEG,
+                segmentIndex: i,
+                outputDir: outputDir,
+                apiKey: apiKey,
+                onPoll: { poll in
+                    await MainActor.run {
+                        onStatus(.generatingSegment(
+                            current: i + 1, total: totalSegments,
+                            poll: poll, maxPolls: Self.maxPollsPerSegment
+                        ))
+                    }
+                }
+            )
+            segmentURLs.append(segmentURL)
+
+            // Extract last frame for chaining to next segment
+            if i < scenes.count - 1 {
+                seedJPEG = (try? await extractLastFrame(from: segmentURL))?
+                    .jpegData(compressionQuality: 0.85)
+                if seedJPEG == nil {
+                    print("[VideoService] Warning: couldn't extract last frame for segment \(i), next segment won't be chained")
+                }
+            }
+        }
+        return segmentURLs
+    }
+
+    /// Fast path ("Enable fast generation"): without the frame hand-off the
+    /// scenes are independent, so they render at the same time instead of
+    /// one after another. Every segment is seeded with the same card
+    /// illustration to hold a common look — but the cuts between scenes are
+    /// visible, which is the consistency the toggle trades away.
+    /// Concurrency is capped so a 3-minute lecture doesn't fire 23 Veo jobs
+    /// at once and trip rate limits.
+    private static func generateSegmentsConcurrently(
+        scenes: [VideoScript.Scene],
+        referenceImage: UIImage?,
+        totalSegments: Int,
+        outputDir: URL,
+        apiKey: String,
+        onStatus: @MainActor @Sendable @escaping (Status) -> Void
+    ) async throws -> [URL] {
+        let seedJPEG = referenceImage?.jpegData(compressionQuality: 0.85)
+        let progress = SegmentProgress(total: totalSegments, onStatus: onStatus)
+        await progress.report()
+
+        var results: [Int: URL] = [:]
+
+        try await withThrowingTaskGroup(of: (Int, URL).self) { group in
+            var nextScene = 0
+
+            func addTask(for index: Int) {
+                let prompt = scenes[index].prompt
+                group.addTask {
+                    let url = try await generateSegmentWithSafeRetry(
+                        prompt: prompt,
+                        referenceJPEG: seedJPEG,
+                        segmentIndex: index,
+                        outputDir: outputDir,
+                        apiKey: apiKey,
+                        onPoll: { poll in await progress.record(segment: index, poll: poll) }
+                    )
+                    return (index, url)
+                }
+            }
+
+            while nextScene < min(maxConcurrentSegments, scenes.count) {
+                addTask(for: nextScene)
+                nextScene += 1
+            }
+
+            while let (index, url) = try await group.next() {
+                results[index] = url
+                await progress.completeOne()
+                if nextScene < scenes.count {
+                    addTask(for: nextScene)
+                    nextScene += 1
+                }
+            }
+        }
+
+        // Task completion order is arbitrary; the film is not.
+        return results.keys.sorted().compactMap { results[$0] }
+    }
+
+    /// Runs one segment, falling back to a deliberately safe abstract prompt
+    /// if the scene trips Veo's content filter, so a single rejected scene
+    /// doesn't sink the whole run.
+    private static func generateSegmentWithSafeRetry(
+        prompt: String,
+        referenceJPEG: Data?,
+        segmentIndex: Int,
+        outputDir: URL,
+        apiKey: String,
+        onPoll: @Sendable @escaping (Int) async -> Void
+    ) async throws -> URL {
+        do {
+            return try await generateSingleSegment(
+                prompt: prompt,
+                referenceJPEG: referenceJPEG,
+                segmentIndex: segmentIndex,
+                outputDir: outputDir,
+                apiKey: apiKey,
+                onPoll: onPoll
+            )
+        } catch VideoError.filtered(let reason) {
+            print("[VideoService] Segment \(segmentIndex + 1) filtered (\(reason)); retrying with sanitized prompt")
+            return try await generateSingleSegment(
+                prompt: """
+                A slow cinematic camera drift through an abstract, softly lit \
+                landscape of light, color, and gentle shapes, evoking a calm \
+                documentary mood. Ambient sound only. No people, no text, no dialogue.
+                """,
+                referenceJPEG: referenceJPEG,
+                segmentIndex: segmentIndex,
+                outputDir: outputDir,
+                apiKey: apiKey,
+                onPoll: onPoll
+            )
+        }
+    }
+
+    /// Aggregates progress across concurrently rendering segments — the
+    /// per-segment callbacks would otherwise fight over the status line.
+    private actor SegmentProgress {
+        private let total: Int
+        private let onStatus: @MainActor @Sendable (Status) -> Void
+        private var completed = 0
+        private var polls: [Int: Int] = [:]
+
+        init(total: Int, onStatus: @escaping @MainActor @Sendable (Status) -> Void) {
+            self.total = total
+            self.onStatus = onStatus
+        }
+
+        func record(segment: Int, poll: Int) async {
+            polls[segment] = poll
+            await report()
+        }
+
+        func completeOne() async {
+            completed += 1
+            await report()
+        }
+
+        func report() async {
+            // Scenes finish out of order, so report how many are done
+            // rather than pretending there's a single current scene.
+            let shown = min(completed + 1, total)
+            let furthestPoll = polls.values.max() ?? 0
+            let callback = onStatus
+            let maxPolls = VideoService.maxPollsPerSegment
+            await MainActor.run {
+                callback(.generatingSegment(
+                    current: shown, total: total,
+                    poll: furthestPoll, maxPolls: maxPolls
+                ))
+            }
+        }
+    }
+
+    // MARK: - Single Veo segment generation
 
     /// Generate one 8-second video segment via the Gemini Veo API.
     /// Ported from veo.service.ts:generateVideoGemini (lines 218–348).
     private static func generateSingleSegment(
         prompt: String,
-        referenceImage: UIImage?,
+        referenceJPEG: Data?,
         segmentIndex: Int,
-        totalSegments: Int,
         outputDir: URL,
         apiKey: String,
-        onStatus: @MainActor @Sendable @escaping (Status) -> Void
+        onPoll: @Sendable @escaping (Int) async -> Void
     ) async throws -> URL {
-        await onStatus(.generatingSegment(
-            current: segmentIndex + 1, total: totalSegments,
-            poll: 0, maxPolls: Self.maxPollsPerSegment
-        ))
+        await onPoll(0)
 
         // Build request body — Gemini Veo uses instances/parameters, and the
         // seed image rides along as inlineData on the instance.
         var instance: [String: Any] = ["prompt": prompt]
 
-        if let image = referenceImage,
-           let imageData = image.jpegData(compressionQuality: 0.85) {
+        if let imageData = referenceJPEG {
             instance["image"] = [
                 "bytesBase64Encoded": imageData.base64EncodedString(),
                 "mimeType": "image/jpeg",
@@ -452,10 +621,7 @@ enum VideoService {
             try await Task.sleep(nanoseconds: UInt64(Self.pollInterval * 1_000_000_000))
             try Task.checkCancellation()
 
-            await onStatus(.generatingSegment(
-                current: segmentIndex + 1, total: totalSegments,
-                poll: i + 1, maxPolls: Self.maxPollsPerSegment
-            ))
+            await onPoll(i + 1)
 
             let pollURL = URL(string: "\(baseURL)/\(operationName)")!
             var pollRequest = URLRequest(url: pollURL)
